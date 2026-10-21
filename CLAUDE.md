@@ -7,7 +7,7 @@ A college timetable web app that works for any college. Admins generate clash-fr
 
 ## Stack
 - **frontend/**: Next.js 16 (App Router, TypeScript) + Tailwind CSS v4. Deployed on Vercel.
-- **backend/**: Python 3.14 + FastAPI + Google OR-Tools CP-SAT. Deployed on Render.
+- **backend/**: Python 3.14.8 (Homebrew) + FastAPI + Google OR-Tools CP-SAT. Deployed on Render.
 - **backend/solver/**: the timetable solver as its own module. College data goes in, a timetable comes out.
 - (Stage 2) Claude chatbot, called **only from the backend** with tool use.
 
@@ -31,7 +31,7 @@ backend/
 Backend (http://localhost:8000):
 ```bash
 cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # first time
+/opt/homebrew/bin/python3.14 -m venv .venv && .venv/bin/pip install -r requirements.txt   # first time
 cp .env.example .env                                                # first time
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
