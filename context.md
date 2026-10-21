@@ -17,14 +17,14 @@ Judging: core functionality (zero clashes), usability (an admin can use it witho
 | **Event organiser** (club, society, department) | Book a seminar hall or auditorium in a free slot, track the approval, see the events calendar |
 
 ## Data model
-- **College settings**: working days (e.g. Mon–Sat), periods per day, period times, lunch break (which period index or indices are blocked).
+- **College settings**: working days (e.g. Mon–Sat), teaching periods per day, optional period time labels, `lunch_after_period` (the lunch break falls between period N and N+1; it is not itself a period).
 - **Department**: id, name.
 - **Section**: id, department, name (e.g. "CSE-3A"), student strength.
-- **Subject**: id, name, code, department, `lecture_hours_per_week`, `lab_hours_per_week`, `lab_block_length` (consecutive periods per lab session, default 2).
-- **Teacher**: id, name, department, optional max periods per day and per week, optional preferences (stage 2).
-- **Assignment**: (teacher, subject, section). This says who teaches what to whom. A subject can have different teachers for lecture and lab.
-- **Room**: id, name, type (`classroom` | `lab` | `seminar_hall` | `auditorium`), capacity, optional department.
-- **Timetable (output)**: list of entries (day, period, section, subject, teacher, room, kind = lecture | lab), plus solver stats and a soft-rule score.
+- **Subject**: id, name, code, department, `lecture_hours`, `lab_hours` (per week), `lab_block_length` (consecutive periods per lab session, default 2), optional `lab_room_ids` (e.g. electronics labs only).
+- **Teacher**: id, name, department, optional `max_periods_per_day` (hard limit), optional preferences (stage 2).
+- **Assignment**: (section, subject, teacher, optional lab_teacher). This says who teaches what to whom. Lab teacher defaults to the lecture teacher.
+- **Room**: id, name, type (`classroom` | `lab` | `seminar_hall` | `auditorium`), capacity, optional department (if set, only that department's sections use it; if not set, it's shared). Lectures use classrooms, labs use labs. Seminar halls and auditoriums are kept free for event bookings.
+- **Timetable (output)**: `SolveResult` = status (`solved` | `infeasible` | `invalid` | `timeout`), entries (day, 1-based period, section, subject, teacher, room, kind = lecture | lab), problems (plain-English message + suggestion), stats (score, penalty per soft rule) and the independent checker's report.
 - **Booking (stage 1 lite)**: room, date, period range, organiser, purpose, attendees, status (`pending` → `approved` / `rejected`), with an approval chain in stage 2.
 
 ## Hard rules (must never break: these are constraints)
@@ -53,6 +53,12 @@ Judging: core functionality (zero clashes), usability (an admin can use it witho
 | **Generic data model** (days, periods, lunch from settings) | It works for any college, which is a judging requirement. |
 | Backend URL and CORS origins from **env vars** | The same code runs locally and on Vercel/Render with no code changes. |
 | Next.js + Tailwind on Vercel, FastAPI on Render | Free tiers, fast deploys, a familiar stack. |
+| Lunch is a **break after period N**, not a blocked period | "Nothing in lunch" holds by construction, and lab blocks simply can't start where they'd cross it. |
+| Seminar halls and auditoriums are **never used for classes** | They stay free for event bookings, which is the organiser feature. |
+| Rooms can belong to a **department**, or be shared | Matches real colleges: department blocks plus a shared lecture theatre and computer labs. |
+| **Independent clash checker** with no shared code with the solver | A solver bug can't hide itself. It also checks imported or hand-edited timetables later. |
+| Failure explained in **two layers**: quick counting pre-checks, then re-solving with one rule group switched off | Pre-checks name the exact short resource instantly. Switching groups off finds hidden bottlenecks (e.g. lunch splitting lab blocks). |
+| Labs seat the **whole section** (no batches yet) | Simpler for today. Splitting labs into batches (A1/A2) is a stage 2 item. |
 | In-memory or JSON storage for the hackathon, a real DB in stage 2 | Saves time today. The data model is designed so a DB can be added later. |
 | Claude chatbot uses **tool use**, called **from the backend only** | Answers come from real data and real functions, never guesses. The API key is never exposed to the browser. |
 | Chatbot model: **Haiku** (latest) | Fast and cheap enough for a live demo with many judges. Set a spending limit in the Anthropic console. |

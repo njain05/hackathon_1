@@ -23,7 +23,14 @@ frontend/
 backend/
   app/main.py     # FastAPI app, CORS, routes
   solver/         # pure CP-SAT solver: no FastAPI imports
-  requirements.txt
+    models.py     #   Pydantic input/output models
+    precheck.py   #   data validation + shortage checks (plain-English errors)
+    cpsat.py      #   the CP-SAT model (hard rules + weighted soft rules)
+    diagnose.py   #   explains infeasibility by relaxing one rule group at a time
+    checker.py    #   independent clash checker (shares no code with cpsat.py)
+    sample_data.py#   realistic sample college
+  tests/          # pytest: solver, checker, API
+  requirements.txt, requirements-dev.txt
   .env.example
 ```
 
@@ -42,7 +49,8 @@ npm install                               # first time
 cp .env.local.example .env.local          # first time
 npm run dev
 ```
-Checks: `cd frontend && npm run lint && npm run build`
+Backend tests: `cd backend && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q`
+Frontend checks: `cd frontend && npm run lint && npm run build`
 
 ## Environment variables
 | Where | Name | Purpose |

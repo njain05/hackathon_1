@@ -3,8 +3,10 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+
+from solver import CollegeData, SolveResult, sample_college, solve
 
 load_dotenv()
 
@@ -30,3 +32,20 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/sample", response_model=CollegeData)
+def sample() -> CollegeData:
+    """A ready-made sample college, used to prefill the admin screens."""
+    return sample_college()
+
+
+# Plain `def` (not async): FastAPI runs it in a worker thread, so a long solve
+# doesn't block other requests.
+@app.post("/generate", response_model=SolveResult)
+def generate(
+    data: CollegeData,
+    time_limit: float = Query(10.0, ge=1, le=60, description="Solver time limit in seconds"),
+) -> SolveResult:
+    """Generate a clash-free timetable, or explain why none is possible."""
+    return solve(data, time_limit_seconds=time_limit)
