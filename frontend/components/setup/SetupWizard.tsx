@@ -78,7 +78,8 @@ function TemplatePicker({ onPick }: { onPick: (d: CollegeData) => void }) {
       <div className="flex flex-col gap-3">
         <h1 className="text-3xl font-bold sm:text-4xl">Set up your college</h1>
         <p className="max-w-2xl text-lg text-ink-soft">
-          Pick the closest starting point. It fills in days, periods, breaks and room types. You can change all of it.
+          Pick the closest starting point. It fills in periods, breaks and room types. You’ll choose your own working
+          days next, and you can change everything.
         </p>
       </div>
       <ul className="grid gap-4 md:grid-cols-3">

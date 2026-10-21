@@ -10,8 +10,6 @@ export const WEEK_DAYS = [
   "Sunday",
 ];
 
-const MON_SAT = WEEK_DAYS.slice(0, 6);
-
 function emptyCollege(settings: Settings, roomTypes: RoomType[]): CollegeData {
   return {
     name: "",
@@ -26,6 +24,7 @@ function emptyCollege(settings: Settings, roomTypes: RoomType[]): CollegeData {
   };
 }
 
+// Templates never assume the working days: the admin chooses their own in step 1.
 export interface StartTemplate {
   id: string;
   title: string;
@@ -38,19 +37,16 @@ export const START_TEMPLATES: StartTemplate[] = [
     id: "engineering",
     title: "Engineering college",
     description:
-      "Mon–Sat, 8 periods of 50 minutes, tea break after period 2, lunch after period 4. Computer labs and other labs.",
+      "8 periods of 50 minutes, lunch after period 4. Computer labs and engineering labs.",
     build: () =>
       emptyCollege(
         {
-          days: MON_SAT,
+          days: [],
           periods_per_day: 8,
           day_start: "09:00",
           period_minutes: 50,
           period_lengths: null,
-          breaks: [
-            { name: "Tea break", after_period: 2, minutes: 10, labs_continue: true },
-            { name: "Lunch", after_period: 4, minutes: 40, labs_continue: false },
-          ],
+          breaks: [{ name: "Lunch", after_period: 4, minutes: 40, labs_continue: false }],
         },
         [
           { id: "classroom", name: "Classroom", use: "lecture" },
@@ -65,11 +61,11 @@ export const START_TEMPLATES: StartTemplate[] = [
     id: "arts-science",
     title: "Arts & Science college",
     description:
-      "Mon–Sat, 6 periods of 55 minutes, lunch after period 3. Science labs, a computer lab and a seminar hall.",
+      "6 periods of 55 minutes, lunch after period 3. Science labs, a computer lab and a seminar hall.",
     build: () =>
       emptyCollege(
         {
-          days: MON_SAT,
+          days: [],
           periods_per_day: 6,
           day_start: "09:30",
           period_minutes: 55,
@@ -89,11 +85,11 @@ export const START_TEMPLATES: StartTemplate[] = [
     id: "scratch",
     title: "Start from scratch",
     description:
-      "Mon–Sat, 8 periods, lunch after period 4, and the basic room types. Change anything.",
+      "8 periods, lunch after period 4, and the basic room types. Change anything.",
     build: () =>
       emptyCollege(
         {
-          days: MON_SAT,
+          days: [],
           periods_per_day: 8,
           day_start: "09:00",
           period_minutes: 50,

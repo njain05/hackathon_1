@@ -3,6 +3,12 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-21: Working days and tea break are the admin's choice**
+  - Week step: Mon–Sun day buttons (tap to select; no tick marks, by request) and quick choices "5-day week (Mon–Fri)" and "6-day week (Mon–Sat)". The matching one is highlighted.
+  - Templates no longer assume any working days. Until days are chosen, the step shows "Choose the days your college has classes" and the Check step blocks generation.
+  - Tea break is now optional. It defaults to "No tea break". Choosing one sets the period and minutes, plus "A lab session can run straight across this break". Removed from the Engineering template defaults.
+  - Advanced "Other breaks" now covers extra breaks only (prayer, assembly…).
+  - Checked: 26 backend tests, lint, type check, production build. In the browser: presets, custom day picks, and adding a tea break shown in the day preview.
 - **2026-10-21: Admin setup wizard (`/setup`)**
   - **First use**: pick a template (Engineering, Arts & Science, Start from scratch) or "Load sample college" (from `GET /sample`).
   - **6 steps** in a period-strip stepper, each with a hint: College & week → Rooms → Teachers → Sections → Subjects (+ who teaches what) → Check & generate.

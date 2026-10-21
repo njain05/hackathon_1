@@ -42,13 +42,15 @@ Everything about a college comes from the admin's data. Nothing is hard-coded: n
 
 ## Works for any college
 - **First use: pick a starting template.**
-  - *Engineering college*: Mon–Sat, 8 × 50 min, tea break after period 2, lunch after period 4, computer and engineering labs.
-  - *Arts & Science college*: Mon–Sat, 6 × 55 min, lunch after period 3, science and computer labs.
-  - *Start from scratch*: Mon–Sat, 8 periods, lunch after period 4, basic room types.
+  - *Engineering college*: 8 × 50 min, lunch after period 4, computer and engineering labs.
+  - *Arts & Science college*: 6 × 55 min, lunch after period 3, science and computer labs.
+  - *Start from scratch*: 8 periods, lunch after period 4, basic room types.
   - *Load sample college*: a complete, solvable demo.
   - Templates only pre-fill settings. Everything stays editable.
+  - **Working days are never assumed.** The admin picks Mon–Sun themselves, with quick choices "5-day week" and "6-day week".
+  - **A tea break is optional** ("No tea break" by default). Lunch can also be switched off.
 - **Basic up front, rare under "Advanced options".**
-  - *Basic*: days, periods, start time, period length, lunch; codes, names, seats, departments, weekly hours.
+  - *Basic*: days, periods, start time, period length, lunch, optional tea break; codes, names, seats, departments, weekly hours.
   - *Advanced*: extra breaks (and whether labs continue across them), different period lengths, room types, a teacher's daily max and unavailable times, lab block length, lab room type, a different lab teacher.
 
 ### College variations: designed for, not all built yet

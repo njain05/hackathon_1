@@ -36,7 +36,8 @@ export default function DayPreview({ settings }: { settings: Settings }) {
         ))}
       </ol>
       <p className="mt-2 text-xs text-ink-soft">
-        {teachingHours} hours of teaching a day, {settings.days.length} days a week.
+        {teachingHours} hours of teaching a day
+        {settings.days.length ? `, ${settings.days.length} days a week.` : ". No working days chosen yet."}
       </p>
     </figure>
   );
