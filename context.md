@@ -17,24 +17,65 @@ Judging: core functionality (zero clashes), usability (an admin can use it witho
 | **Event organiser** (club, society, department) | Book a seminar hall or auditorium in a free slot, track the approval, see the events calendar |
 
 ## Data model
-- **College settings**: working days (e.g. Mon–Sat), teaching periods per day, optional period time labels, `lunch_after_period` (the lunch break falls between period N and N+1; it is not itself a period).
-- **Department**: id, name.
-- **Section**: id, department, name (e.g. "CSE-3A"), student strength.
-- **Subject**: id, name, code, department, `lecture_hours`, `lab_hours` (per week), `lab_block_length` (consecutive periods per lab session, default 2), optional `lab_room_ids` (e.g. electronics labs only).
-- **Teacher**: id, name, department, optional `max_periods_per_day` (hard limit), optional preferences (stage 2).
-- **Assignment**: (section, subject, teacher, optional lab_teacher). This says who teaches what to whom. Lab teacher defaults to the lecture teacher.
-- **Room**: id, name, type (`classroom` | `lab` | `seminar_hall` | `auditorium`), capacity, optional department (if set, only that department's sections use it; if not set, it's shared). Lectures use classrooms, labs use labs. Seminar halls and auditoriums are kept free for event bookings.
-- **Timetable (output)**: `SolveResult` = status (`solved` | `infeasible` | `invalid` | `timeout`), entries (day, 1-based period, section, subject, teacher, room, kind = lecture | lab), problems (plain-English message + suggestion), stats (score, penalty per soft rule) and the independent checker's report.
-- **Booking (stage 1 lite)**: room, date, period range, organiser, purpose, attendees, status (`pending` → `approved` / `rejected`), with an approval chain in stage 2.
+Everything about a college comes from the admin's data. Nothing is hard-coded: not days, periods, period lengths, breaks or room types. Codes typed by the admin (CSE, C-101, HK, CSE-3A, CS201) are the ids, so spreadsheets can refer to them.
+
+- **Settings**:
+  - `days` (any list, in order) and `periods_per_day`.
+  - `day_start` and `period_minutes`, plus optional `period_lengths` when periods differ.
+  - `breaks`: name, `after_period`, minutes, and `labs_continue`, which is true when a lab may run across the break (a tea break, for example).
+- **Room types** (`room_types`): admin-defined (Classroom, Computer lab, Seminar hall…). Each has a `use`: `lecture`, `lab`, or `event` (never used for classes; kept for bookings).
+- **Department**: id (code), name.
+- **Section**: id (code), name, department, student strength.
+- **Subject**: id (code), name, department, `lecture_hours` and `lab_hours` a week, `lab_block_length` (periods in a row per lab, default 2), optional `lab_room_type` (e.g. labs only in electronics labs).
+- **Teacher**:
+  - id (short code), name and home department. A teacher can teach any department.
+  - Optional `max_periods_per_day` (hard limit).
+  - `unavailable`: a list of (day, period) they can't teach, entered as "Mon 1-2, Sat all day".
+- **Assignment**: (section, subject, teacher, optional lab teacher). Who teaches what. The lab teacher defaults to the lecture teacher.
+- **Room**: id (code), name, type (a room type id), capacity, optional department. If a department is set, only its sections use the room; if not, the room is shared.
+- **Timetable (output)**: `SolveResult` contains:
+  - status (`solved` | `infeasible` | `invalid` | `timeout`)
+  - entries (day, 1-based period, section, subject, teacher, room, kind)
+  - problems (message, suggestion and the setup `step` to fix it in)
+  - stats and the independent checker's report.
+- **Booking (later)**: room, date, period range, organiser, purpose, attendees, status (`pending` → `approved` / `rejected`), with an approval chain in stage 2.
+
+## Works for any college
+- **First use: pick a starting template.**
+  - *Engineering college*: Mon–Sat, 8 × 50 min, tea break after period 2, lunch after period 4, computer and engineering labs.
+  - *Arts & Science college*: Mon–Sat, 6 × 55 min, lunch after period 3, science and computer labs.
+  - *Start from scratch*: Mon–Sat, 8 periods, lunch after period 4, basic room types.
+  - *Load sample college*: a complete, solvable demo.
+  - Templates only pre-fill settings. Everything stays editable.
+- **Basic up front, rare under "Advanced options".**
+  - *Basic*: days, periods, start time, period length, lunch; codes, names, seats, departments, weekly hours.
+  - *Advanced*: extra breaks (and whether labs continue across them), different period lengths, room types, a teacher's daily max and unavailable times, lab block length, lab room type, a different lab teacher.
+
+### College variations: designed for, not all built yet
+The model is built so each of these is an **additive, optional field**: existing data stays valid, and the solver treats a missing field as "off".
+
+| Variation | Status | How it fits the model |
+|---|---|---|
+| Breaks of any length, anywhere | **Built** | `settings.breaks[]`, with `labs_continue` per break |
+| Periods of different lengths | **Built** | `settings.period_lengths` (clock times only; the solver works in periods) |
+| Custom room types | **Built** | `room_types[]` with a `use`; rooms and subjects refer to them by id |
+| Teachers shared across departments | **Built** | `department_id` is only the home department; assignments may cross departments |
+| Teacher unavailable times | **Built** | `teacher.unavailable[]`: a hard constraint in the solver, also checked by the checker and pre-checks |
+| Lab batches (section split into groups) | Planned | `section.batches: [{id, strength}]` + `assignment.lab_by_batch: bool`. Each batch gets its own lab variables. Batches of one section may share a slot in different labs (or rotate subjects), but block the whole section. Capacity is checked per batch. |
+| Combined / elective classes across sections | Planned | `assignment.section_ids: [..]` (today's `section_id` becomes the 1-element case) for combined lectures. Electives as `elective_groups: [{sections, options: [assignment…]}]` running in the same slot in parallel rooms. |
+| Multiple shifts (morning/evening) | Planned | `settings.shifts: [{id, days, day_start, periods_per_day, breaks}]` + `section.shift_id`. Today's settings become the single default shift. Rooms and teachers are shared across shifts using clock-time overlap. |
+| Teacher preferences ("no classes before 10 on Fri") | Planned | `teacher.preferred_off: [slot]` as a soft penalty (unlike the hard `unavailable`) |
 
 ## Hard rules (must never break: these are constraints)
 1. No **teacher** is double-booked in any (day, period).
 2. No **section** is double-booked in any (day, period).
 3. No **room** is double-booked in any (day, period).
-4. **Labs** are held only in `lab` rooms, as **consecutive periods** (a block of `lab_block_length` periods) that do not cross the lunch break or the end of the day.
+4. **Labs** are held only in rooms whose type is used for labs (and of the subject's `lab_room_type`, if set), as **consecutive periods** (a block of `lab_block_length`) that don't cross the end of the day or a break, unless that break has `labs_continue`.
 5. **Room capacity** ≥ section strength.
 6. Exactly the required lecture and lab hours per week are scheduled for every assignment.
-7. Nothing is scheduled in the lunch break.
+7. Nothing is scheduled in a break.
+8. **Teacher unavailable times** and **max periods a day** are respected.
+9. Lectures only in rooms used for lectures. Rooms used for events (seminar halls, auditoriums) never get classes. Department rooms only for that department.
 
 ## Soft rules (preferences: weighted penalties in the objective)
 1. **Spread** each subject across the week (avoid the same subject twice in one day).
@@ -53,11 +94,17 @@ Judging: core functionality (zero clashes), usability (an admin can use it witho
 | **Generic data model** (days, periods, lunch from settings) | It works for any college, which is a judging requirement. |
 | Backend URL and CORS origins from **env vars** | The same code runs locally and on Vercel/Render with no code changes. |
 | Next.js + Tailwind on Vercel, FastAPI on Render | Free tiers, fast deploys, a familiar stack. |
-| Lunch is a **break after period N**, not a blocked period | "Nothing in lunch" holds by construction, and lab blocks simply can't start where they'd cross it. |
+| Breaks sit **between periods** (`after_period`) and are not periods themselves | "Nothing in a break" holds by construction, and lab blocks simply can't start where they'd cross one. |
 | Seminar halls and auditoriums are **never used for classes** | They stay free for event bookings, which is the organiser feature. |
 | Rooms can belong to a **department**, or be shared | Matches real colleges: department blocks plus a shared lecture theatre and computer labs. |
 | **Independent clash checker** with no shared code with the solver | A solver bug can't hide itself. It also checks imported or hand-edited timetables later. |
 | Failure explained in **two layers**: quick counting pre-checks, then re-solving with one rule group switched off | Pre-checks name the exact short resource instantly. Switching groups off finds hidden bottlenecks (e.g. lunch splitting lab blocks). |
+| **Codes are the ids** (CSE, C-101, HK, CSE-3A, CS201) | Admins already use these codes. Spreadsheets refer to them directly. Renaming a code in the UI updates every reference. |
+| **One column definition per table** drives the on-screen table, the Excel/CSV template, file import and paste | They can never disagree. Header aliases ("Room no.", "Initials", "L"/"P") let real admin sheets import as they are. |
+| Excel/CSV import **runs in the browser** (SheetJS from its official CDN; the npm copy is outdated) | Instant, works offline, and the data doesn't leave the device until Generate. |
+| **Bad rows are skipped and listed** (sheet, row, reason, fix); good rows import | One typo shouldn't block a 200-row load sheet. Same code means update, new code means add, so re-importing is safe. |
+| Setup draft saved in **browser storage** until stage 2 adds a database | Nothing is lost on refresh. No login needed for the hackathon. |
+| Pre-generation checks in **two places**: instant browser checks (missing or duplicate entries), then server `/check` (impossible setups, same code as the solver) | Fast feedback while typing, and one source of truth for feasibility rules. |
 | Labs seat the **whole section** (no batches yet) | Simpler for today. Splitting labs into batches (A1/A2) is a stage 2 item. |
 | In-memory or JSON storage for the hackathon, a real DB in stage 2 | Saves time today. The data model is designed so a DB can be added later. |
 | Claude chatbot uses **tool use**, called **from the backend only** | Answers come from real data and real functions, never guesses. The API key is never exposed to the browser. |
@@ -78,6 +125,9 @@ Judging: core functionality (zero clashes), usability (an admin can use it witho
 - **Teachers**: "My week" with free periods, leave + suggested substitutes (free that period and teaching that subject), extra or makeup class finder, preferences the solver respects ("no classes before 10 on Fridays").
 - **Organisers**: full approval chain (organiser → HOD → dean, one click each, status visible at every step), a college events calendar to avoid same-day clashes.
 - **Admins / HODs**: fair sharing of seminar halls and labs between departments, reports (teacher workload, room usage, rooms that could be freed), exam timetables (no student has two exams at once) using the same solver.
+- **Offline / low-connectivity colleges**:
+  - **Local college server**: one `docker compose up` runs the backend, frontend and database on a PC in the college LAN. It works with no internet and keeps the data on campus. Same images as the cloud deploy.
+  - **Installable PWA for viewing**: teachers and students install the app on their phones. A service worker caches their published timetable, so it opens offline, and changes sync when back online. Viewing works offline; editing and generating need the server.
 - **Chatbot (Claude, tool use)**:
   - Students and teachers: "What do I have tomorrow?", "When is Prof. Sharma free?", "Is any room free now?"
   - Organisers: "Book the seminar hall next Friday afternoon for 60 people". The bot finds a hall that fits and drafts the request, and the user confirms it.

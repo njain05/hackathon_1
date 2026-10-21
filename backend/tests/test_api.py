@@ -30,3 +30,14 @@ def test_generate_explains_infeasible() -> None:
 
 def test_generate_rejects_malformed_input() -> None:
     assert client.post("/generate", json={"settings": {}}).status_code == 422
+
+
+def test_check_passes_sample_and_explains_overload() -> None:
+    data = client.get("/sample").json()
+    assert client.post("/check", json=data).json() == {"ok": True, "problems": []}
+    for a in data["assignments"]:
+        a["teacher_id"] = "HK"
+    body = client.post("/check", json=data).json()
+    assert body["ok"] is False
+    assert body["problems"][0]["kind"] == "teacher_overload"
+    assert body["problems"][0]["step"] == "subjects"

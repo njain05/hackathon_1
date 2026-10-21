@@ -11,7 +11,12 @@ from .models import CollegeData, Problem, SolveResult
 from .precheck import find_shortages, validate_data
 from .sample_data import sample_college
 
-__all__ = ["CollegeData", "SolveResult", "check_timetable", "sample_college", "solve"]
+__all__ = ["CollegeData", "SolveResult", "check_timetable", "precheck", "sample_college", "solve"]
+
+
+def precheck(data: CollegeData) -> list[Problem]:
+    """Fast checks to run before generating: broken data first, then clear shortages."""
+    return validate_data(data) or find_shortages(data)
 
 
 def solve(data: CollegeData, time_limit_seconds: float = 10.0) -> SolveResult:
@@ -19,7 +24,6 @@ def solve(data: CollegeData, time_limit_seconds: float = 10.0) -> SolveResult:
     problems = validate_data(data)
     if problems:
         return SolveResult(status="invalid", problems=problems)
-
     problems = find_shortages(data)
     if problems:
         return SolveResult(status="infeasible", problems=problems)

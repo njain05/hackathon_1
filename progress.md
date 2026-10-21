@@ -3,6 +3,44 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-21: Admin setup wizard (`/setup`)**
+  - **First use**: pick a template (Engineering, Arts & Science, Start from scratch) or "Load sample college" (from `GET /sample`).
+  - **6 steps** in a period-strip stepper, each with a hint: College & week → Rooms → Teachers → Sections → Subjects (+ who teaches what) → Check & generate.
+  - **Week step**: days, periods, start time, period length, lunch. A to-scale "Your day" preview with real clock times. Advanced: extra breaks (labs continue?), different period lengths. Departments table.
+  - **Every table** supports:
+    - add and delete rows, edited like a spreadsheet;
+    - **Ctrl+V of rows copied from Excel** (or a paste box);
+    - **Import Excel/CSV** for that step;
+    - download template (workbook or CSV);
+    - an "Advanced options" toggle for rare columns.
+  - **Whole-workbook** download and import, with a "How to use" sheet.
+  - **Import rules**: header aliases are recognised. Bad rows are skipped and listed as sheet, row, reason and fix. The same code updates a row; a new code adds one.
+  - Renaming a code updates every reference (e.g. teacher HK → HKR moves their classes).
+  - **Check & generate** shows:
+    - instant browser checks (missing, duplicate or blank entries; labs with no lab room);
+    - then server `POST /check` (impossible setups, e.g. not enough lab time, teacher overloaded);
+    - each problem with a "Fix in <step>" button;
+    - load bars per teacher and section;
+    - the Generate button.
+  - The draft is saved in browser storage.
+- **2026-10-21: Data model made fully data-driven** (backend + solver):
+  - breaks list with `labs_continue`;
+  - `day_start`, `period_minutes`, `period_lengths`;
+  - admin-defined `room_types` with a use;
+  - `subject.lab_room_type` (replaces `lab_room_ids`);
+  - `teacher.unavailable` (enforced by the solver, checker and pre-checks);
+  - `Problem.step`;
+  - `POST /check`.
+  - The sample now uses human codes (HK, CSE-3A, CS201, C-101) and has a tea break that labs may cross. 26 backend tests pass.
+- **2026-10-21: Theme**:
+  - Palette from the brief: cream #FEF9F2, blue #789DBC, pink #FFE3E3, mint #C9E9D2. Navy #3B5F80 and ink #1F2A37 added for readable text and buttons.
+  - Font: Atkinson Hyperlegible Next.
+  - Verified in the browser:
+    - Template → paste → workbook import (78 rows; 3 planted bad rows reported) → checks → Generate: 115 periods, 0 clashes.
+    - Download → re-import round trip: 80 updated, 0 errors.
+    - Rename propagation; availability parsing and errors.
+    - Infeasible setup explained with "Fix in Rooms".
+    - Phone width 375px with no sideways scroll.
 - **2026-10-21: Solver + POST /generate**
   - `backend/solver/` is a pure module:
     - models, pre-checks, CP-SAT model, diagnosis, independent clash checker, sample college.
@@ -34,11 +72,16 @@ Update after every completed step. Newest entries at the top of each section.
 - (none)
 
 ## Next
-1. Frontend: admin data entry (prefilled sample) → Generate → section/teacher/room grid views.
+1. Timetable views: section / teacher / room grids from the saved result (`localStorage` key `timetable.result.v1`), print-friendly.
 2. Optional: simple hall booking (free slots only, one-click approve), then an "Ask the timetable" box.
 3. Deploy: backend on Render (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`), frontend on Vercel with `NEXT_PUBLIC_API_URL`.
 
 ## Problems & fixes
+- Tailwind v4 silently dropped classes defined with `@apply` inside `@layer components`. Fixed by using `@utility btn-primary { ... }`.
+- The Next dev server (Turbopack) once kept serving stale CSS after `globals.css` changed. A restart fixed it.
+- `create-next-app`'s `.gitignore` pattern `.env*` also hid `.env.local.example`. Fixed earlier with `!.env*.example`.
+- `npm audit` reports a high-severity `braces` issue in build tooling only (not shipped to the browser). Left for now; check again before deploying.
+- The SheetJS `activeTab` workbook view works but is missing from its TypeScript types, so it is cast with a comment.
 - Starlette's TestClient warned that `httpx` is deprecated, so the dev dependencies use `httpx2` instead.
 - Teacher load imbalance is the only non-zero penalty on the sample. It counts days off as 0 load, so a teacher with 6 periods a week can't be perfectly even. This is expected and not a bug.
 - `create-next-app` made its own `.git` inside `frontend/`. Removed it so the repo has a single git root.

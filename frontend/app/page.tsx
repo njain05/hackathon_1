@@ -1,13 +1,20 @@
+import Link from "next/link";
 import HealthStatus from "@/components/HealthStatus";
 
 export default function Home() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-      <h1 className="text-3xl font-semibold tracking-tight">College Timetable</h1>
-      <p className="max-w-md text-zinc-600">
-        One place for the whole college: timetables, schedules and hall bookings.
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-6 px-4 py-16">
+      <h1 className="text-4xl font-bold sm:text-5xl">College Timetable</h1>
+      <p className="max-w-xl text-lg text-ink-soft">
+        One place for the whole college. Admins build a clash-free timetable, teachers and students see their own
+        week, and organisers book halls without paper letters.
       </p>
-      <HealthStatus />
+      <div className="flex flex-wrap items-center gap-4">
+        <Link href="/setup" className="btn-primary !px-5 !py-3 !text-base">
+          Set up your college
+        </Link>
+        <HealthStatus />
+      </div>
     </main>
   );
 }

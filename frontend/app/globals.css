@@ -1,26 +1,76 @@
 @import "tailwindcss";
 
+/* Palette from the brief: cream, blue, pink and mint, plus a deeper blue
+   and blue-black ink so text and buttons stay readable (WCAG AA). Light
+   only: timetables are printed and shown on projectors. */
+@theme {
+  --color-cream: #fef9f2;    /* page */
+  --color-sky: #789dbc;      /* you are here: current step, selected, bars */
+  --color-mint: #c9e9d2;     /* breaks, success */
+  --color-blush: #ffe3e3;    /* table headers, highlighted rows */
+  --color-paper: #fffdfa;    /* surfaces that hold data */
+  --color-ink: #1f2a37;      /* text */
+  --color-ink-soft: #5b6b7a; /* secondary text */
+  --color-line: #dde3ea;     /* borders */
+  --color-navy: #3b5f80;     /* buttons, links, focus (deeper #789DBC) */
+  --color-navy-dark: #2e4b66;
+  --color-ok: #1e6b47;
+  --color-err: #b3261e;
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-navy);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Reusable component classes (Tailwind v4 @utility so variants and @apply work). */
+@utility btn-primary {
+    @apply inline-flex items-center gap-2 rounded-md bg-navy px-3.5 py-2 text-sm font-semibold text-white hover:bg-navy-dark disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-quiet {
+    @apply inline-flex items-center gap-2 rounded-md border border-line bg-paper px-3.5 py-2 text-sm font-semibold text-ink hover:bg-blush disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility menu-item {
+    @apply rounded px-3 py-2 text-left text-sm hover:bg-blush;
+}
+
+@utility cell {
+    @apply w-full rounded border border-transparent bg-transparent px-2 py-1.5 hover:border-line focus:border-navy focus:bg-white focus:outline-none;
+}
+
+@utility cell-invalid {
+    @apply border-err/60 bg-err/5;
+}
+
+@utility field {
+    @apply rounded-md border border-line bg-paper px-3 py-2 focus:border-navy focus:outline-none;
+}
+
+@utility field-label {
+    @apply text-sm font-semibold;
+}
+
+@utility hint {
+    @apply text-sm text-ink-soft;
 }

@@ -16,6 +16,8 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
     subjects = {x.id: x for x in data.subjects}
     teachers = {x.id: x for x in data.teachers}
     rooms = {x.id: x for x in data.rooms}
+    room_use = {t.id: t.use for t in data.room_types}
+    unavailable = {(t.id, sl.day, sl.period) for t in data.teachers for sl in t.unavailable}
     assigned = {(a.section_id, a.subject_id): a for a in data.assignments}
 
     clashes: list[Issue] = []
@@ -64,13 +66,16 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
         if room.department_id is not None and room.department_id != sec.department_id:
             violation("room_department", (room.id, sec.id),
                       f"{room.name} is reserved for another department, but {sec.name} uses it.", e)
+        if (e.teacher_id, e.day, e.period) in unavailable:
+            violation("teacher_unavailable", (e.teacher_id, e.day, str(e.period)),
+                      f"{teachers[e.teacher_id].name} teaches on {e.day} period {e.period}, but is marked unavailable then.", e)
         if e.kind == "lab":
-            if room.type != "lab":
+            if room_use.get(room.type) != "lab":
                 violation("lab_room", (room.id, sub.id), f"{sub.name} lab is in {room.name}, which is not a lab.", e)
-            elif sub.lab_room_ids is not None and room.id not in sub.lab_room_ids:
-                violation("lab_room", (room.id, sub.id), f"{sub.name} lab is in {room.name}, which is not allowed for it.", e)
+            elif sub.lab_room_type is not None and room.type != sub.lab_room_type:
+                violation("lab_room", (room.id, sub.id), f"{sub.name} lab is in {room.name}, which is the wrong kind of lab.", e)
             lab_periods[e.section_id, e.subject_id, e.day].append((e.period, e.room_id))
-        elif room.type != "classroom":
+        elif room_use.get(room.type) != "lecture":
             violation("lecture_room", (room.id, sub.id), f"{sub.name} lecture is in {room.name}, which is not a classroom.", e)
 
         a = assigned.get((e.section_id, e.subject_id))
@@ -111,15 +116,15 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
                 violation("hours", (sid, subid, kind),
                           f"{sections[sid].name} has {got} {kind} periods of {sub.name}, needs {need}.")
 
-    # ---- Labs are blocks of consecutive periods in one room, not crossing lunch ----
-    lunch = s.lunch_after_period
+    # ---- Labs are blocks of consecutive periods in one room, not crossing a break ----
+    lab_cuts = {b.after_period for b in s.breaks if not b.labs_continue}
     for (sid, subid, day), slots in lab_periods.items():
         block = subjects[subid].lab_block_length
         slots.sort()
         runs: list[int] = []
         prev: tuple[int, str] | None = None
         for p, rid in slots:
-            continues = prev is not None and p == prev[0] + 1 and rid == prev[1] and prev[0] != lunch
+            continues = prev is not None and p == prev[0] + 1 and rid == prev[1] and prev[0] not in lab_cuts
             if continues:
                 runs[-1] += 1
             else:

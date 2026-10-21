@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from solver import CollegeData, SolveResult, sample_college, solve
+from pydantic import BaseModel
+
+from solver import CollegeData, SolveResult, precheck, sample_college, solve
+from solver.models import Problem
 
 load_dotenv()
 
@@ -38,6 +41,18 @@ def health() -> dict[str, str]:
 def sample() -> CollegeData:
     """A ready-made sample college, used to prefill the admin screens."""
     return sample_college()
+
+
+class CheckResult(BaseModel):
+    ok: bool
+    problems: list[Problem]
+
+
+@app.post("/check", response_model=CheckResult)
+def check(data: CollegeData) -> CheckResult:
+    """Quick pre-generation checks: broken data and impossible setups, in plain words."""
+    problems = precheck(data)
+    return CheckResult(ok=not problems, problems=problems)
 
 
 # Plain `def` (not async): FastAPI runs it in a worker thread, so a long solve

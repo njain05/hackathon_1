@@ -4,7 +4,7 @@ Variables
 - lecture[a, day, period, room]: assignment a has a lecture there.
 - lab[a, day, start, room]: assignment a starts a lab block there. One variable
   covers the whole block, so lab periods are consecutive by construction, and
-  only starts that don't cross lunch or the end of the day exist.
+  only starts that don't cross a break or the end of the day exist.
 
 Hard rules are constraints. Soft rules are penalties in the objective.
 """
@@ -15,8 +15,8 @@ from dataclasses import dataclass
 
 from ortools.sat.python import cp_model
 
-from .common import Index, day_segments, lab_rooms, lab_starts, lab_teacher, lecture_rooms
-from .models import CollegeData, Entry, RoomType, SolveStats
+from .common import Index, lab_rooms, lab_starts, lab_teacher, lecture_rooms, rest_segments, room_uses
+from .models import CollegeData, Entry, SolveStats
 
 MAX_CONSECUTIVE = 3  # a teacher teaching more periods in a row than this is penalised
 
@@ -29,7 +29,9 @@ WEIGHTS = {
 }
 
 # Groups of hard rules that diagnosis can switch off one at a time.
-RELAXABLE = ("classrooms", "lab_rooms", "teachers", "teacher_daily_max", "sections")
+RELAXABLE = (
+    "classrooms", "lab_rooms", "teachers", "teacher_availability", "teacher_daily_max", "sections",
+)
 
 Key = tuple[str, int, int]  # (resource id, day, period)
 
@@ -106,10 +108,16 @@ def solve_model(
     if "teachers" not in relax:
         for lits in tea_occ.values():
             m.AddAtMostOne(lits)
+    uses = room_uses(data)
     for (rid, _, _), lits in room_occ.items():
-        group = "lab_rooms" if idx.rooms[rid].type == RoomType.LAB else "classrooms"
+        group = "lab_rooms" if uses[idx.rooms[rid].type] == "lab" else "classrooms"
         if group not in relax:
             m.AddAtMostOne(lits)
+    if "teacher_availability" not in relax:
+        for t in data.teachers:
+            for slot in t.unavailable:
+                for x in tea_occ.get((t.id, idx.day_pos[slot.day], slot.period - 1), []):
+                    m.Add(x == 0)
     if "teacher_daily_max" not in relax:
         for t in data.teachers:
             if t.max_periods_per_day is not None:
@@ -127,7 +135,7 @@ def solve_model(
             m.Add(extra >= sum(lits) - 1)
             terms["subject_repeats_same_day"].append(extra)
 
-        segments = day_segments(s)
+        segments = rest_segments(s)
         for t in data.teachers:
             busy = {
                 (d, p): sum(tea_occ.get((t.id, d, p), [])) for d in range(days) for p in range(periods)
@@ -139,7 +147,7 @@ def solve_model(
                 load = m.NewIntVar(0, periods, "")
                 m.Add(load == sum(busy[d, p] for p in range(periods)))
                 loads.append(load)
-                # 3. Long runs: more than MAX_CONSECUTIVE periods in a row (lunch resets the run).
+                # 3. Long runs: more than MAX_CONSECUTIVE periods in a row (any break resets the run).
                 for seg in segments:
                     for w in range(seg.start, seg.stop - MAX_CONSECUTIVE):
                         window = [busy[d, q] for q in range(w, w + MAX_CONSECUTIVE + 1)]

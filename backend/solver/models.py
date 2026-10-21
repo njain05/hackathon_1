@@ -1,42 +1,65 @@
 """Input and output models for the timetable solver.
 
-Everything about a college (days, periods, lunch, rooms...) comes from data,
+Everything about a college (days, periods, breaks, room types...) comes from data,
 so the same solver works for any college.
 """
 
-from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class RoomType(StrEnum):
-    CLASSROOM = "classroom"
-    LAB = "lab"
-    SEMINAR_HALL = "seminar_hall"
-    AUDITORIUM = "auditorium"
+RoomUse = Literal["lecture", "lab", "event"]
+
+
+class RoomType(BaseModel):
+    """Admin-defined kind of room, e.g. "Computer lab" used for labs."""
+
+    id: str
+    name: str
+    use: RoomUse = Field(description="lecture = classes, lab = lab sessions, event = never used for classes")
+
+
+DEFAULT_ROOM_TYPES = [
+    RoomType(id="classroom", name="Classroom", use="lecture"),
+    RoomType(id="lab", name="Lab", use="lab"),
+    RoomType(id="seminar_hall", name="Seminar hall", use="event"),
+    RoomType(id="auditorium", name="Auditorium", use="event"),
+]
+
+_HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class Break(BaseModel):
+    name: str = "Break"
+    after_period: int = Field(ge=1, description="The break comes after this period (1-based)")
+    minutes: int = Field(ge=1, le=240)
+    labs_continue: bool = Field(
+        False, description="True if a lab may run across this break (e.g. a short tea break)"
+    )
 
 
 class Settings(BaseModel):
     days: list[str] = Field(min_length=1, description="Working days, in order")
     periods_per_day: int = Field(ge=1, le=16, description="Teaching periods per day")
-    lunch_after_period: int | None = Field(
-        None,
-        ge=1,
-        description="Lunch break comes after this period (1-based). None = no lunch break.",
+    day_start: str = Field("09:00", pattern=_HHMM)
+    period_minutes: int = Field(50, ge=10, le=240)
+    period_lengths: list[int] | None = Field(
+        None, description="Optional minutes for each period, if they differ"
     )
-    period_times: list[str] | None = Field(
-        None, description='Optional labels per period, e.g. "09:00-09:50"'
-    )
+    breaks: list[Break] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check(self) -> "Settings":
         if len(set(self.days)) != len(self.days):
             raise ValueError("Day names must be unique")
-        if self.lunch_after_period is not None and self.lunch_after_period >= self.periods_per_day:
-            raise ValueError("lunch_after_period must be smaller than periods_per_day")
-        if self.period_times is not None and len(self.period_times) != self.periods_per_day:
-            raise ValueError("period_times must have one entry per period")
+        afters = [b.after_period for b in self.breaks]
+        if len(set(afters)) != len(afters):
+            raise ValueError("Two breaks come after the same period")
+        if any(a >= self.periods_per_day for a in afters):
+            raise ValueError("A break must come before the last period of the day")
+        if self.period_lengths is not None and len(self.period_lengths) != self.periods_per_day:
+            raise ValueError("period_lengths must have one entry per period")
         return self
 
 
@@ -60,16 +83,22 @@ class Subject(BaseModel):
     lecture_hours: int = Field(ge=0, description="Lecture periods per week")
     lab_hours: int = Field(0, ge=0, description="Lab periods per week")
     lab_block_length: int = Field(2, ge=1, description="Consecutive periods per lab session")
-    lab_room_ids: list[str] | None = Field(
-        None, description="If set, labs may only use these rooms (e.g. electronics labs)"
+    lab_room_type: str | None = Field(
+        None, description="If set, labs only use rooms of this type (e.g. computer_lab)"
     )
+
+
+class Slot(BaseModel):
+    day: str
+    period: int = Field(ge=1)
 
 
 class Teacher(BaseModel):
     id: str
     name: str
-    department_id: str
+    department_id: str = Field(description="Home department; teachers may teach any department")
     max_periods_per_day: int | None = Field(None, ge=1)
+    unavailable: list[Slot] = Field(default_factory=list, description="Periods they can't teach")
 
 
 class Assignment(BaseModel):
@@ -84,7 +113,7 @@ class Assignment(BaseModel):
 class Room(BaseModel):
     id: str
     name: str
-    type: RoomType
+    type: str = Field(description="Id of a room type")
     capacity: int = Field(ge=1)
     department_id: str | None = Field(
         None, description="If set, only this department's sections use it; None = shared"
@@ -94,6 +123,7 @@ class Room(BaseModel):
 class CollegeData(BaseModel):
     name: str = "My College"
     settings: Settings
+    room_types: list[RoomType] = Field(default_factory=lambda: list(DEFAULT_ROOM_TYPES))
     departments: list[Department]
     sections: list[Section]
     subjects: list[Subject]
@@ -125,6 +155,9 @@ class Problem(BaseModel):
     kind: str
     message: str
     suggestion: str = ""
+    step: str | None = Field(
+        None, description="Setup step to fix it in: week, rooms, teachers, sections, subjects"
+    )
 
 
 class Issue(BaseModel):

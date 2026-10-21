@@ -2,7 +2,7 @@ from collections import Counter
 
 from solver import CollegeData, SolveResult, check_timetable, sample_college, solve
 from solver.models import (
-    Assignment, Department, Room, RoomType, Section, Settings, Subject, Teacher,
+    Assignment, Break, Department, Room, Section, Settings, Slot, Subject, Teacher,
 )
 
 
@@ -39,11 +39,12 @@ def test_every_assignment_gets_its_hours(sample_result: SolveResult) -> None:
 def test_labs_are_consecutive_in_lab_rooms_and_skip_lunch(sample_result: SolveResult) -> None:
     data = sample_college()
     rooms = {r.id: r for r in data.rooms}
-    lunch = data.settings.lunch_after_period
+    uses = {t.id: t.use for t in data.room_types}
+    lunch = next(b.after_period for b in data.settings.breaks if b.name == "Lunch")
     labs: dict[tuple[str, str, str], list[int]] = {}
     for e in sample_result.entries:
         if e.kind == "lab":
-            assert rooms[e.room_id].type == RoomType.LAB
+            assert uses[rooms[e.room_id].type] == "lab"
             labs.setdefault((e.section_id, e.subject_id, e.day), []).append(e.period)
     assert labs, "sample data should contain labs"
     for periods in labs.values():
@@ -57,11 +58,12 @@ def test_room_capacity_and_department_respected(sample_result: SolveResult) -> N
     data = sample_college()
     rooms = {r.id: r for r in data.rooms}
     sections = {s.id: s for s in data.sections}
+    uses = {t.id: t.use for t in data.room_types}
     for e in sample_result.entries:
         room, sec = rooms[e.room_id], sections[e.section_id]
         assert room.capacity >= sec.strength
         assert room.department_id in (None, sec.department_id)
-        assert room.type in (RoomType.CLASSROOM, RoomType.LAB)  # halls stay free for events
+        assert uses[room.type] != "event"  # halls stay free for events
 
 
 def test_soft_rules_reported(sample_result: SolveResult) -> None:
@@ -76,7 +78,7 @@ def test_soft_rules_reported(sample_result: SolveResult) -> None:
 def test_section_overload_is_explained() -> None:
     data = sample_college()
     for sub in data.subjects:
-        if sub.id.startswith("cs-") and sub.id in {"cs-ds", "cs-dm", "cs-dbms"}:
+        if sub.id in {"CS201", "MA201", "CS203"}:
             sub.lecture_hours = 8
     result = solve(data)
     assert result.status == "infeasible"
@@ -87,10 +89,9 @@ def test_section_overload_is_explained() -> None:
 
 def test_lab_shortage_is_explained() -> None:
     data = sample_college()
-    data.rooms = [r for r in data.rooms if r.id != "cl-2"]
+    data.rooms = [r for r in data.rooms if r.id != "CL-2"]
     for sub in data.subjects:
-        sub.lab_room_ids = [i for i in sub.lab_room_ids or [] if i != "cl-2"] or None
-        if sub.id.startswith("cs-") and sub.lab_hours:
+        if sub.department_id == "CSE" and sub.lab_hours:
             sub.lab_hours = 4
     result = solve(data)
     assert result.status == "infeasible"
@@ -108,8 +109,8 @@ def test_no_room_big_enough_is_explained() -> None:
 def test_teacher_overload_is_explained() -> None:
     data = sample_college()
     for a in data.assignments:
-        if a.section_id.startswith("cse"):
-            a.teacher_id = "t-harpreet"
+        if a.section_id.startswith("CSE"):
+            a.teacher_id = "HK"
     result = solve(data)
     assert result.status == "infeasible"
     assert any(p.kind == "teacher_overload" and "Harpreet" in p.message for p in result.problems)
@@ -118,7 +119,8 @@ def test_teacher_overload_is_explained() -> None:
 def _tiny_lab_college(sections: int) -> CollegeData:
     """1 day, 4 periods, lunch after period 1: only ONE 2-period lab block fits per lab room."""
     return CollegeData(
-        settings=Settings(days=["Mon"], periods_per_day=4, lunch_after_period=1),
+        settings=Settings(days=["Mon"], periods_per_day=4,
+                          breaks=[Break(name="Lunch", after_period=1, minutes=40)]),
         departments=[Department(id="d", name="Dept")],
         sections=[Section(id=f"s{i}", name=f"Section {i}", department_id="d", strength=30)
                   for i in range(sections)],
@@ -127,7 +129,7 @@ def _tiny_lab_college(sections: int) -> CollegeData:
         teachers=[Teacher(id=f"t{i}", name=f"Teacher {i}", department_id="d") for i in range(sections)],
         assignments=[Assignment(section_id=f"s{i}", subject_id="phy", teacher_id=f"t{i}")
                      for i in range(sections)],
-        rooms=[Room(id="lab", name="Physics Lab", type=RoomType.LAB, capacity=40)],
+        rooms=[Room(id="lab", name="Physics Lab", type="lab", capacity=40)],
     )
 
 
@@ -149,3 +151,32 @@ def test_invalid_data_is_reported() -> None:
     messages = " ".join(p.message for p in result.problems)
     assert '"nobody"' in messages
     assert "blocks of 2" in messages
+
+
+def test_teacher_unavailable_times_are_respected() -> None:
+    data = sample_college()
+    hk = next(t for t in data.teachers if t.id == "HK")
+    hk.unavailable = [Slot(day="Monday", period=p) for p in range(1, 8)] + [Slot(day="Friday", period=1)]
+    result = solve(data)
+    assert result.status == "solved"
+    assert result.check is not None and result.check.ok
+    assert not [e for e in result.entries if e.teacher_id == "HK" and (e.day == "Monday" or (e.day == "Friday" and e.period == 1))]
+
+
+def test_labs_may_run_across_a_break_only_when_allowed() -> None:
+    """2 periods with a tea break between them: a 2-period lab only fits across the break."""
+    data = _tiny_lab_college(1)
+    data.settings = Settings(days=["Mon"], periods_per_day=2,
+                             breaks=[Break(name="Tea", after_period=1, minutes=10)])
+    assert solve(data).status == "invalid"  # no stretch of 2 periods without a break
+    data.settings.breaks[0].labs_continue = True
+    result = solve(data)
+    assert result.status == "solved" and result.check is not None and result.check.ok
+
+
+def test_unknown_room_type_is_reported() -> None:
+    data = sample_college()
+    data.rooms[0].type = "hall-of-fame"
+    result = solve(data)
+    assert result.status == "invalid"
+    assert result.problems[0].step == "rooms"

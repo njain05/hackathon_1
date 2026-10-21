@@ -7,9 +7,9 @@ time. If dropping a group makes it solvable, that group is the bottleneck.
 
 from collections import defaultdict
 
-from .common import Index, lab_teacher
+from .common import Index, lab_teacher, room_uses
 from .cpsat import RELAXABLE, solve_model
-from .models import CollegeData, Problem, RoomType
+from .models import CollegeData, Problem
 
 
 def _busiest(load: dict[str, int], names: dict[str, str], cap: int) -> str:
@@ -28,42 +28,51 @@ def _explain(group: str, data: CollegeData) -> Problem:
         teacher_load[lab_teacher(a)] += sub.lab_hours
         section_load[a.section_id] += sub.lecture_hours + sub.lab_hours
 
-    def room_names(t: RoomType) -> str:
-        return ", ".join(r.name for r in data.rooms if r.type == t)
+    uses = room_uses(data)
+
+    def room_names(use: str) -> str:
+        return ", ".join(r.name for r in data.rooms if uses.get(r.type) == use)
 
     if group == "lab_rooms":
         return Problem(
-            kind="lab_shortage",
+            kind="lab_shortage", step="rooms",
             message="Lab rooms are the bottleneck. Each lab needs a block of consecutive "
-            "periods in a suitable lab, and the lunch break and end of day limit where "
-            f"blocks fit. There aren't enough free lab blocks in: {room_names(RoomType.LAB)}.",
+            "periods in a suitable lab, and breaks and the end of the day limit where "
+            f"blocks fit. There aren't enough free lab blocks in: {room_names('lab')}.",
             suggestion="Add a lab room, allow labs in more rooms, add a working day, or "
             "shorten some lab blocks.",
         )
     if group == "classrooms":
         return Problem(
-            kind="classroom_shortage",
+            kind="classroom_shortage", step="rooms",
             message="Classrooms are the bottleneck. There aren't enough free classroom "
-            f"periods for every lecture: {room_names(RoomType.CLASSROOM)}.",
+            f"periods for every lecture: {room_names('lecture')}.",
             suggestion="Add a classroom, let departments share rooms, or add a working day.",
         )
     if group == "teachers":
         names = {t.id: t.name for t in data.teachers}
         return Problem(
-            kind="teacher_shortage",
+            kind="teacher_shortage", step="subjects",
             message="Teachers are the bottleneck. Some teachers' classes can't all be fitted "
             f"without overlapping. Busiest: {_busiest(teacher_load, names, slots)}.",
             suggestion="Move some classes from the busiest teachers to colleagues.",
         )
+    if group == "teacher_availability":
+        return Problem(
+            kind="teacher_unavailable", step="teachers",
+            message="Teachers' unavailable times leave too few periods to fit their classes "
+            "without clashes.",
+            suggestion="Free up some unavailable times, or move classes to other teachers.",
+        )
     if group == "teacher_daily_max":
         return Problem(
-            kind="teacher_daily_limit",
+            kind="teacher_daily_limit", step="teachers",
             message="Teachers' 'max periods per day' limits are too strict to fit everything.",
             suggestion="Raise the daily limits, or spread their classes over more days.",
         )
     names = {sec.id: sec.name for sec in data.sections}
     return Problem(
-        kind="section_shortage",
+        kind="section_shortage", step="subjects",
         message="Section timetables are too full to fit every class around the shared "
         f"teachers and rooms. Fullest: {_busiest(section_load, names, slots)}.",
         suggestion="Reduce weekly hours for these sections, or add periods or a working day.",
@@ -71,10 +80,14 @@ def _explain(group: str, data: CollegeData) -> Problem:
 
 
 def diagnose(data: CollegeData, time_limit_seconds: float = 5.0) -> list[Problem]:
-    has_daily_max = any(t.max_periods_per_day is not None for t in data.teachers)
+    skip: set[str] = set()
+    if not any(t.max_periods_per_day is not None for t in data.teachers):
+        skip.add("teacher_daily_max")
+    if not any(t.unavailable for t in data.teachers):
+        skip.add("teacher_availability")
     found = []
     for group in RELAXABLE:
-        if group == "teacher_daily_max" and not has_daily_max:
+        if group in skip:
             continue
         out = solve_model(data, time_limit_seconds, relax=frozenset({group}), optimize=False)
         if out.status in ("OPTIMAL", "FEASIBLE"):
