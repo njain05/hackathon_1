@@ -1,11 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, checkCollege, generateTimetable } from "@/lib/api";
 import { loads, localChecks, type Finding } from "@/lib/checks";
+import { saveTimetable } from "@/lib/result";
 import type { CollegeData, Problem, SolveResult, StepId } from "@/lib/types";
-
-const RESULT_KEY = "timetable.result.v1";
 
 const STEP_NAMES: Record<StepId, string> = {
   week: "College & week",
@@ -79,6 +79,7 @@ export default function StepReview({ data, goTo }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<SolveResult | null>(null);
+  const router = useRouter();
 
   // Ask the server for the deeper checks once the basics are fixed.
   useEffect(() => {
@@ -109,11 +110,8 @@ export default function StepReview({ data, goTo }: Props) {
       const r = await generateTimetable(data);
       setResult(r);
       if (r.status === "solved") {
-        try {
-          window.localStorage.setItem(RESULT_KEY, JSON.stringify({ data, result: r, at: new Date().toISOString() }));
-        } catch {
-          // storage full: the result is still shown
-        }
+        saveTimetable({ data, result: r, at: new Date().toISOString() });
+        router.push("/timetable");
       }
     } catch (e) {
       setServerError(e instanceof ApiError ? e.message : "Generation failed. Try again.");
@@ -186,8 +184,12 @@ export default function StepReview({ data, goTo }: Props) {
           <button type="button" className="btn-primary !px-5 !py-3 !text-base" disabled={!ready || generating} onClick={generate}>
             {generating ? "Generating timetable…" : "Generate timetable"}
           </button>
-          <p className="hint">
-            {ready ? "Usually takes 5 to 20 seconds." : "Available once the checks above pass."}
+          <p className="hint" aria-live="polite">
+            {generating
+              ? "Fitting every class around teachers, rooms and breaks, then checking for clashes. This usually takes 5 to 20 seconds."
+              : ready
+                ? "Usually takes 5 to 20 seconds."
+                : "Available once the checks above pass."}
           </p>
         </div>
         {result?.status === "solved" && (
@@ -195,9 +197,7 @@ export default function StepReview({ data, goTo }: Props) {
             <p className="font-semibold">
               Timetable ready: {result.entries.length} periods placed, {result.check?.clashes.length ?? 0} clashes.
             </p>
-            <p className="hint">
-              Checked independently for teacher, section and room clashes. Viewing it by section, teacher and room comes next.
-            </p>
+            <p className="hint">Opening the timetables…</p>
           </div>
         )}
         {result && result.status !== "solved" && (

@@ -13,6 +13,12 @@ export default function Home() {
         <Link href="/setup" className="btn-primary !px-5 !py-3 !text-base">
           Set up your college
         </Link>
+        <Link href="/timetable" className="btn-quiet !px-5 !py-3 !text-base">
+          See timetables
+        </Link>
+        <Link href="/my" className="btn-quiet !px-5 !py-3 !text-base">
+          My timetable
+        </Link>
         <HealthStatus />
       </div>
     </main>

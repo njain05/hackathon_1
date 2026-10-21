@@ -106,6 +106,13 @@ export interface Entry {
   kind: "lecture" | "lab";
 }
 
+export interface Issue {
+  kind: string; // teacher_clash | section_clash | room_clash | capacity | ...
+  message: string;
+  day: string | null;
+  period: number | null;
+}
+
 export interface SolveResult {
   status: "solved" | "infeasible" | "invalid" | "timeout";
   entries: Entry[];
@@ -117,5 +124,5 @@ export interface SolveResult {
     score: number;
     penalties: Record<string, number>;
   } | null;
-  check: { ok: boolean; clashes: { message: string }[]; violations: { message: string }[] } | null;
+  check: { ok: boolean; clashes: Issue[]; violations: Issue[] } | null;
 }

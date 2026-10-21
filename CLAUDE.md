@@ -15,8 +15,12 @@ A college timetable web app that works for any college. Admins generate clash-fr
 ```
 CLAUDE.md, context.md, progress.md, README.md, .gitignore
 frontend/
-  app/            # routes: / (home), /setup (admin setup wizard)
+  app/            # routes: / (home), /setup (wizard), /timetable (all views), /my (student/teacher)
   components/setup/ # wizard, steps, DataTable (edit/paste/import), DayPreview
+  components/timetable/ # TimetableGrid (grid + phone list + key), QualityPanel, TimetablePage, MyTimetable
+  lib/grid.ts     # entries -> day rows: merged lab blocks, break columns, subject colours
+  lib/result.ts   # last generated timetable in localStorage (timetable.result.v1)
+  lib/local.ts    # useLocal(): safe localStorage via useSyncExternalStore
   lib/types.ts    # mirrors backend/solver/models.py: keep in sync
   lib/tables.ts   # ONE column spec per table: drives UI, templates, import, paste
   lib/excel.ts    # SheetJS workbook/CSV templates + import (in the browser)
@@ -74,6 +78,6 @@ Frontend checks: `cd frontend && npm run lint && npm run build`
 6. Usability first. An admin must be able to use every screen without help: clear labels, empty states, readable errors.
 7. Timetables must be easy to read: a day × period grid, the lunch break visible, colour by subject.
 10. **Nothing college-specific in code.** Days, periods, breaks and room types come from data. New college variations are added as optional fields (see context.md, "College variations").
-11. Colours only from the theme tokens in `frontend/app/globals.css` (cream, sky, mint, blush, plus navy and ink for contrast). Reusable classes go in `@utility` blocks, not `@layer components` (Tailwind v4).
+11. Colours only from the theme tokens in `frontend/app/globals.css` (cream, sky, mint, blush, plus navy and ink for contrast). Reusable classes go in `@utility` blocks, not `@layer components` (Tailwind v4). Variables read only via `var()` (like `--color-subject-N`) go in `:root`, because Tailwind drops unused `@theme` variables. If a CSS change doesn't show in dev, restart `npm run dev`.
 8. The chatbot never invents schedule data. It calls real backend functions through tool use.
 9. Small, working steps. Commit after each one and log it in `progress.md`.

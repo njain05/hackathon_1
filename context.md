@@ -117,7 +117,7 @@ The model is built so each of these is an **additive, optional field**: existing
 ### Today (2 hours): win the core
 1. Data entry for an admin, with a **sample college preloaded** so the demo works in one click.
 2. **Timetable generation** with CP-SAT: zero clashes, labs as blocks, soft rules scored.
-3. Easy-to-read **section / teacher / room views** (day × period grid, lunch visible, colour by subject).
+3. ✅ Easy-to-read **section / teacher / room views** (day × period grid, breaks with clock times, colour by subject, labs as one block), a **My timetable** page with Today, print and phone layouts.
 4. A clear message when generation fails (which resource is short).
 5. If time allows: a **simple hall booking**. Pick a date, see **only free slots** (taken from the timetable and other bookings), submit, and approve with one click.
 6. If the core is done by about minute 90: an **"Ask the timetable"** box (e.g. "Where's my next class?") using Claude tool use.

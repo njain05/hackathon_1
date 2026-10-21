@@ -21,6 +21,22 @@
 
 :root {
   color-scheme: light;
+
+  /* Subject tints for timetable cells: light, distinct, ink text stays readable.
+     Plain variables (not @theme) because cells read them with var() and
+     Tailwind only emits theme variables that a utility class uses. */
+  --color-subject-1: #dce7f1;
+  --color-subject-2: #ffe3e3;
+  --color-subject-3: #d6efdd;
+  --color-subject-4: #fbe9c8;
+  --color-subject-5: #e7dff3;
+  --color-subject-6: #d3ecef;
+  --color-subject-7: #f6dcea;
+  --color-subject-8: #e6eecf;
+  --color-subject-9: #f1e0cf;
+  --color-subject-10: #dbe1f6;
+  --color-subject-11: #e0efe8;
+  --color-subject-12: #f3e6d8;
 }
 
 body {
@@ -33,6 +49,27 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-navy);
   outline-offset: 2px;
+}
+
+/* Print: one clean timetable per page, no buttons or navigation. */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  body {
+    background: white;
+  }
+  .print-page {
+    break-after: page;
+  }
+  .print-page:last-child {
+    break-after: auto;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

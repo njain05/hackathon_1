@@ -3,6 +3,33 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-21: Timetable views (`/timetable`, `/my`)**
+  - **Generate** (Check step) shows a loading message while the solver runs, saves the result in browser storage (`timetable.result.v1`, with a snapshot of the data it was made from) and opens `/timetable`. If the solve fails, the backend's plain-English problems appear with "Fix in <step>" buttons.
+  - **/timetable**:
+    - a green "Verified: 0 clashes" badge from the independent checker (teacher, section and room clash counts);
+    - the quality score with each penalty explained in plain words;
+    - switching between by section, by teacher and by room, each with a dropdown (seminar halls and auditoriums are left out because they never hold classes);
+    - Print this timetable, and Print all (one A4 landscape page each, no buttons or navigation).
+  - **Grid**:
+    - days × periods from the data, with breaks as columns showing real clock times (`dayBlocks`);
+    - each subject gets its own colour (12 tints, `--color-subject-N` in globals.css);
+    - a lab is one merged block, including across a break labs may cross, but never across lunch or past its block length;
+    - each cell shows subject, plus teacher and room, section and room, or section and teacher, depending on the view;
+    - a subject key with weekly periods sits underneath.
+  - **Phones**: a day-by-day list replaces the grid below 768px.
+  - **/my**:
+    - "I'm a student / I'm a teacher", then pick a section or name (remembered in this browser);
+    - a Today card with Now (class, break, free, done) and Next, with minutes left;
+    - the week grid with today's row highlighted and the current class outlined.
+    - `?now=Monday 10:15` in the address bar fakes the clock for demos.
+  - **Tested in the browser**:
+    - Sample college: Generate → /timetable, all 3 views, quality panel.
+    - Admin-edited setup: 08:30 start, 60-minute periods, lunch after period 3, no tea break. Times followed the data.
+    - **6-day week**: Saturday row, 115 periods, 0 clashes; a lab merges across the tea break.
+    - /my at Monday 10:15 (lab now, ends in 15 min), Monday 12:00 ("Lunch until 12:30"), Sunday ("No classes today", first class Monday), and the teacher role.
+    - Phone list at 375px with no sideways scroll.
+    - Print: all = 5 pages, this = 1.
+  - Lint, type check and build pass; 26 backend tests pass.
 - **2026-10-21: Working days and tea break are the admin's choice**
   - Week step: Mon–Sun day buttons (tap to select; no tick marks, by request) and quick choices "5-day week (Mon–Fri)" and "6-day week (Mon–Sat)". The matching one is highlighted.
   - Templates no longer assume any working days. Until days are chosen, the step shows "Choose the days your college has classes" and the Check step blocks generation.
@@ -78,11 +105,13 @@ Update after every completed step. Newest entries at the top of each section.
 - (none)
 
 ## Next
-1. Timetable views: section / teacher / room grids from the saved result (`localStorage` key `timetable.result.v1`), print-friendly.
-2. Optional: simple hall booking (free slots only, one-click approve), then an "Ask the timetable" box.
-3. Deploy: backend on Render (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`), frontend on Vercel with `NEXT_PUBLIC_API_URL`.
+1. Simple hall booking (free slots only, one-click approve), then an "Ask the timetable" box.
+2. Deploy: backend on Render (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`), frontend on Vercel with `NEXT_PUBLIC_API_URL`.
 
 ## Problems & fixes
+- Tailwind v4 only outputs `@theme` variables that a utility class uses. The subject colours are read with `var()` from inline styles, so they were dropped. Fixed by moving them to plain `:root` variables.
+- Turbopack again kept serving stale CSS after a `globals.css` edit, and a dev-server restart fixed it. **If a CSS change doesn't show up, restart `npm run dev`.**
+- The print preview itself wasn't checked here (the browser's print dialog can't be opened from the test tools). The print markup and page breaks were checked in the page instead. Do a real print preview before the demo.
 - Tailwind v4 silently dropped classes defined with `@apply` inside `@layer components`. Fixed by using `@utility btn-primary { ... }`.
 - The Next dev server (Turbopack) once kept serving stale CSS after `globals.css` changed. A restart fixed it.
 - `create-next-app`'s `.gitignore` pattern `.env*` also hid `.env.local.example`. Fixed earlier with `!.env*.example`.
