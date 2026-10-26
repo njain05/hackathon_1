@@ -19,7 +19,7 @@ def precheck(data: CollegeData) -> list[Problem]:
     return validate_data(data) or find_shortages(data)
 
 
-def solve(data: CollegeData, time_limit_seconds: float = 10.0) -> SolveResult:
+def solve(data: CollegeData, time_limit_seconds: float = 10.0, workers: int | None = None) -> SolveResult:
     """Make a clash-free timetable, or explain why none is possible."""
     problems = validate_data(data)
     if problems:
@@ -28,7 +28,7 @@ def solve(data: CollegeData, time_limit_seconds: float = 10.0) -> SolveResult:
     if problems:
         return SolveResult(status="infeasible", problems=problems)
 
-    out = solve_model(data, time_limit_seconds)
+    out = solve_model(data, time_limit_seconds, workers=workers)
     if out.status in ("OPTIMAL", "FEASIBLE"):
         return SolveResult(
             status="solved",

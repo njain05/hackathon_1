@@ -1,5 +1,7 @@
 from collections import Counter
 
+import pytest
+
 from solver import CollegeData, SolveResult, check_timetable, sample_college, solve
 from solver.models import (
     Assignment, Break, Department, Room, Section, Settings, Slot, Subject, Teacher,
@@ -180,3 +182,11 @@ def test_unknown_room_type_is_reported() -> None:
     result = solve(data)
     assert result.status == "invalid"
     assert result.problems[0].step == "rooms"
+
+
+def test_few_workers_still_give_a_clash_free_timetable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Small servers run with SOLVER_WORKERS=2: the result must stay clash-free."""
+    monkeypatch.setenv("SOLVER_WORKERS", "2")
+    result = solve(sample_college(), time_limit_seconds=10)
+    assert result.status == "solved"
+    assert result.check is not None and result.check.ok

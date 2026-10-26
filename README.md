@@ -48,6 +48,7 @@ If you forget the variable, the Vercel build stops with "NEXT_PUBLIC_API_URL is 
 ### Good to know
 - **The free Render server sleeps** after about 15 minutes without visitors. The next visit wakes it in up to a minute, and the site shows "Waking up the server, this can take up to a minute" meanwhile. Before a demo, open `<Render URL>/health` a couple of minutes early.
 - **Every push to `main` redeploys both** Render and Vercel automatically.
+- **Solver speed on the free plan**: Render's free server has about a tenth of a CPU, so `render.yaml` sets `SOLVER_WORKERS=2` (2 search threads beat 8 on a tiny CPU). Generating the sample takes about 20 seconds there, against about 5 on a laptop. A paid plan with more CPU is faster; then raise `SOLVER_WORKERS` to match its CPU count.
 - **Vercel preview links** (from other branches) have different URLs that aren't in `FRONTEND_ORIGINS`, so they can't reach the backend. Use the production URL.
 - **Troubleshooting**:
   - Browser console says *blocked by CORS policy*: `FRONTEND_ORIGINS` doesn't exactly match the site's address (check `https://` and no trailing `/`).

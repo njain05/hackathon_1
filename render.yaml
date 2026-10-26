@@ -18,6 +18,10 @@ services:
       # and nothing in the code needs 3.14.
       - key: PYTHON_VERSION
         value: 3.14.8
+      # The free plan has ~0.1 CPU. 2 solver threads give much better
+      # timetables there than the default 8 (which may find none in time).
+      - key: SOLVER_WORKERS
+        value: "2"
       # Your Vercel URL, e.g. https://college-timetable.vercel.app
       # (comma-separate several). Render asks for it when the Blueprint is created.
       - key: FRONTEND_ORIGINS

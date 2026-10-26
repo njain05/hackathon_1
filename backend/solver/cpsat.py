@@ -9,6 +9,7 @@ Variables
 Hard rules are constraints. Soft rules are penalties in the objective.
 """
 
+import os
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -36,6 +37,16 @@ RELAXABLE = (
 Key = tuple[str, int, int]  # (resource id, day, period)
 
 
+def default_workers() -> int:
+    """Search threads. 8 suits a laptop; on a tiny server (Render free has ~0.1 CPU)
+    2 finds far better timetables in the same time, and 8 may find none.
+    Set SOLVER_WORKERS in the server's environment."""
+    try:
+        return max(1, int(os.getenv("SOLVER_WORKERS", "8")))
+    except ValueError:
+        return 8
+
+
 @dataclass
 class Outcome:
     status: str  # CP-SAT status name: OPTIMAL, FEASIBLE, INFEASIBLE, UNKNOWN, MODEL_INVALID
@@ -55,6 +66,7 @@ def solve_model(
     time_limit_seconds: float,
     relax: frozenset[str] = frozenset(),
     optimize: bool = True,
+    workers: int | None = None,
 ) -> Outcome:
     idx = Index(data)
     s = data.settings
@@ -179,7 +191,7 @@ def solve_model(
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_seconds
-    solver.parameters.num_workers = 8
+    solver.parameters.num_workers = workers or default_workers()
     status = solver.Solve(m)
     name = solver.StatusName(status)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
