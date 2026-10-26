@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, getSample } from "@/lib/api";
 import { downloadWorkbook, importWorkbook, readSpreadsheet } from "@/lib/excel";
+import { ensureAwake } from "@/lib/server";
 import { useCollege } from "@/lib/store";
 import { START_TEMPLATES } from "@/lib/templates";
 import type { CollegeData, StepId } from "@/lib/types";
@@ -138,6 +139,11 @@ export default function SetupWizard() {
   const [step, setStep] = useState<StepId>("week");
   const [report, setReport] = useState<Report | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // A free server may be asleep: start waking it now, so it's ready by the checks step.
+  useEffect(() => {
+    void ensureAwake();
+  }, []);
 
   if (!loaded) return <p className="p-8 text-ink-soft">Loading…</p>;
   if (!data)

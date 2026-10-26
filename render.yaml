@@ -1,0 +1,28 @@
+# Render Blueprint for the backend (FastAPI + OR-Tools).
+# Render: New > Blueprint > pick this repo. See README "Deploy".
+services:
+  - type: web
+    name: college-timetable-api
+    runtime: python
+    plan: free
+    region: singapore # closest Render region to Punjab
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      # Same version as backend/.python-version (Render only reads that file
+      # at the repo root, so it is set explicitly here). If Render ever stops
+      # offering 3.14, change this to the newest 3.12.x: ortools supports it
+      # and nothing in the code needs 3.14.
+      - key: PYTHON_VERSION
+        value: 3.14.8
+      # Your Vercel URL, e.g. https://college-timetable.vercel.app
+      # (comma-separate several). Render asks for it when the Blueprint is created.
+      - key: FRONTEND_ORIGINS
+        sync: false
+      # Postgres connection string from Supabase (Render's own disk is wiped on
+      # every restart, so the database must live elsewhere). Used from P2 on.
+      - key: DATABASE_URL
+        sync: false

@@ -3,6 +3,25 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: P1 Deploy ready** (config only, no feature changes)
+  - `render.yaml` (Blueprint):
+    - backend service, free, Singapore, `rootDir: backend`;
+    - build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health check `/health`;
+    - `PYTHON_VERSION=3.14.8`, set explicitly because Render only reads `.python-version` from the repo root (Render's docs list 3.14.8 as supported, its current default; fall back to the newest 3.12.x if ever needed);
+    - `FRONTEND_ORIGINS` and `DATABASE_URL` prompted at creation (`sync: false`).
+  - **Sleeping free server doesn't look broken**:
+    - `frontend/lib/server.ts` `ensureAwake()` checks `/health` (4 s) and, if the server is asleep, polls every 3 s for up to 90 s;
+    - every API call goes through it and retries once on a network error or 502/503/504;
+    - `ServerBanner` (in the root layout) shows "Waking up the server, this can take up to a minute", or "isn't answering" with a Try again button;
+    - the home badge and the setup wizard start waking the server on page load.
+  - `next.config.ts` fails the Vercel build if `NEXT_PUBLIC_API_URL` is missing, instead of shipping a site that calls localhost.
+  - README **Deploy**: click-by-click Render → Vercel → `FRONTEND_ORIGINS`, plus checks, free-tier notes and troubleshooting.
+  - `npm audit`: 0 vulnerabilities (the old `braces` advisory is gone), so nothing changed.
+  - **Tested**:
+    - a production build with a remote `NEXT_PUBLIC_API_URL`: the URL is baked in, with no `localhost:8000` left;
+    - a fake sleeping server (503 for 15 s): the banner showed, then cleared, and the badge turned "Server connected";
+    - lint and type check pass; 26 backend tests pass.
+  - Built in a scratch copy (not `frontend/.next`), because the P2 session works in the same folder.
 - **2026-10-21: Timetable views (`/timetable`, `/my`)**
   - **Generate** (Check step) shows a loading message while the solver runs, saves the result in browser storage (`timetable.result.v1`, with a snapshot of the data it was made from) and opens `/timetable`. If the solve fails, the backend's plain-English problems appear with "Fix in <step>" buttons.
   - **/timetable**:
