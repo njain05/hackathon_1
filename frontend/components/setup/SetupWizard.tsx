@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import AppNav from "@/components/AppNav";
 import { AdminLinkNotice, CloudSave, useOpenAdminLink } from "@/components/share/CloudSave";
+import { readAdminAccess, setAdminAccess } from "@/lib/cloud";
 import { ApiError, getSample } from "@/lib/api";
 import { downloadWorkbook, importWorkbook, readSpreadsheet } from "@/lib/excel";
 import { useAccess } from "@/lib/access";
@@ -14,6 +16,8 @@ import ImportReport, { type Report } from "./ImportReport";
 import StepReview from "./StepReview";
 import { StepRooms, StepSections, StepSubjects, StepTeachers } from "./StepTables";
 import StepWeek from "./StepWeek";
+
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 interface StepInfo {
   id: StepId;
@@ -27,31 +31,31 @@ const STEPS: StepInfo[] = [
     id: "week",
     title: "College & week",
     hint: "Set up the days, periods and breaks once. Every timetable is built on this grid. Then list your departments.",
-    count: (d) => `${d.settings.days.length} days`,
+    count: (d) => plural(d.settings.days.length, "day"),
   },
   {
     id: "rooms",
     title: "Rooms",
     hint: "List every room with its seats. Mark a room with a department if only that department uses it; otherwise it’s shared.",
-    count: (d) => `${d.rooms.length} rooms`,
+    count: (d) => plural(d.rooms.length, "room"),
   },
   {
     id: "teachers",
     title: "Teachers",
     hint: "Use short codes (like HK for Dr. Harpreet Kaur). Teachers can teach in any department, not just their own.",
-    count: (d) => `${d.teachers.length} teachers`,
+    count: (d) => plural(d.teachers.length, "teacher"),
   },
   {
     id: "sections",
     title: "Sections",
     hint: "A section is a group of students who sit together, like CSE-3A. Students count must fit the room.",
-    count: (d) => `${d.sections.length} sections`,
+    count: (d) => plural(d.sections.length, "section"),
   },
   {
     id: "subjects",
     title: "Subjects",
     hint: "Give each subject its lectures and lab periods a week, then say which teacher takes it for each section.",
-    count: (d) => `${d.subjects.length} subjects`,
+    count: (d) => plural(d.subjects.length, "subject"),
   },
   {
     id: "review",
@@ -217,6 +221,7 @@ export default function SetupWizard() {
 
   return (
     <div className="flex min-h-full flex-col">
+      <AppNav collegeName={data.name} />
       <header className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
         <div className="mr-auto min-w-0">
           <p className="text-sm text-ink-soft">Timetable setup</p>
@@ -244,7 +249,13 @@ export default function SetupWizard() {
           type="button"
           className="btn-quiet"
           onClick={() => {
-            if (window.confirm("Start over? Everything entered so far will be cleared from this browser.")) {
+            const online = readAdminAccess();
+            const message = online
+              ? `Start over? This clears the setup from this browser and disconnects it from ${online.code}. The copy saved online stays as it is; open your admin link to continue it later.`
+              : "Start over? Everything entered so far will be cleared from this browser.";
+            if (window.confirm(message)) {
+              // Disconnect first, so autosave can't upload the empty setup over the online copy.
+              setAdminAccess(null);
               replaceData(null);
               setReport(null);
             }

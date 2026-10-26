@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ApiError, checkCollege, generateTimetable } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ApiError, checkCollege, generateTimetable, toApi } from "@/lib/api";
 import { loads, localChecks, type Finding } from "@/lib/checks";
 import { saveTimetable } from "@/lib/result";
 import type { CollegeData, Problem, SolveResult, StepId } from "@/lib/types";
@@ -78,8 +78,17 @@ export default function StepReview({ data, goTo }: Props) {
   const [server, setServer] = useState<{ for: CollegeData; problems: Problem[] } | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [result, setResult] = useState<SolveResult | null>(null);
+  const [attempt, setAttempt] = useState(0); // "Check again" re-runs the server check
   const router = useRouter();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Ask the server for the deeper checks once the basics are fixed.
   useEffect(() => {
@@ -97,7 +106,7 @@ export default function StepReview({ data, goTo }: Props) {
     return () => {
       live = false;
     };
-  }, [data, errors.length]);
+  }, [data, errors.length, attempt]);
 
   const serverProblems = server?.for === data ? server.problems : null;
   const checking = !errors.length && !serverProblems && !serverError;
@@ -105,18 +114,21 @@ export default function StepReview({ data, goTo }: Props) {
 
   const generate = async () => {
     setGenerating(true);
+    setGenerateError(null);
     setResult(null);
     try {
       const r = await generateTimetable(data);
-      setResult(r);
       if (r.status === "solved") {
-        saveTimetable({ data, result: r, at: new Date().toISOString() });
-        router.push("/timetable");
+        // Save exactly what was sent, so Publish gets data that matches the timetable.
+        saveTimetable({ data: toApi(data), result: r, at: new Date().toISOString() });
+        // Only move on if the admin is still on this step; otherwise the result waits on Timetables.
+        if (mounted.current) router.push("/timetable");
       }
+      if (mounted.current) setResult(r);
     } catch (e) {
-      setServerError(e instanceof ApiError ? e.message : "Generation failed. Try again.");
+      if (mounted.current) setGenerateError(e instanceof ApiError ? e.message : "Generation failed. Try again.");
     } finally {
-      setGenerating(false);
+      if (mounted.current) setGenerating(false);
     }
   };
 
@@ -151,7 +163,21 @@ export default function StepReview({ data, goTo }: Props) {
           </>
         )}
         {checking && <p className="hint">Checking whether every class can fit…</p>}
-        {serverError && <p className="font-semibold text-err">{serverError}</p>}
+        {serverError && (
+          <div role="alert" className="flex flex-wrap items-center gap-3">
+            <p className="font-semibold text-err">{serverError}</p>
+            <button
+              type="button"
+              className="btn-quiet !py-1"
+              onClick={() => {
+                setServerError(null);
+                setAttempt((n) => n + 1);
+              }}
+            >
+              Check again
+            </button>
+          </div>
+        )}
         {serverProblems && serverProblems.length > 0 && (
           <>
             <p>The data is complete, but this setup can’t work yet:</p>
@@ -192,6 +218,11 @@ export default function StepReview({ data, goTo }: Props) {
                 : "Available once the checks above pass."}
           </p>
         </div>
+        {generateError && (
+          <p role="alert" className="font-semibold text-err">
+            {generateError}
+          </p>
+        )}
         {result?.status === "solved" && (
           <div className="rounded-md bg-mint px-3 py-2">
             <p className="font-semibold">

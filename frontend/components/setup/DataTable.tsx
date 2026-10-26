@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { downloadCsv, downloadWorkbook, importTable, readSpreadsheet } from "@/lib/excel";
 import { renameRefs } from "@/lib/store";
 import { importGrid, type Column, type RowError, type TableSpec } from "@/lib/tables";
@@ -31,6 +31,28 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
   const rows = spec.rows(data);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
+  const [undo, setUndo] = useState<{ row: T; index: number; label: string } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+
+  const rowLabel = (row: T, i: number) => {
+    const code = spec.codeKey ? String((row as Record<string, unknown>)[spec.codeKey] ?? "").trim() : "";
+    return code ? `${spec.noun} ${code}` : `row ${i + 1}`;
+  };
+  const deleteRow = (i: number) => {
+    const row = rows[i];
+    setRows(rows.filter((_, j) => j !== i));
+    setUndo({ row, index: i, label: rowLabel(row, i) });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndo(null), 8000);
+  };
+  const restoreRow = () => {
+    if (!undo) return;
+    const next = [...rows];
+    next.splice(Math.min(undo.index, next.length), 0, undo.row);
+    setRows(next);
+    setUndo(null);
+  };
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -108,13 +130,19 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
             e.target.value = "";
           }}
         />
-        <details className="relative">
+        <details className="relative" ref={menuRef}>
           <summary className="btn-quiet list-none cursor-pointer">Download template</summary>
           <div className="absolute z-20 mt-1 flex w-64 flex-col rounded-md border border-line bg-paper p-1 shadow-lg">
-            <button type="button" className="menu-item" onClick={() => downloadWorkbook(data, spec.sheet)}>
+            <button type="button" className="menu-item" onClick={() => {
+                downloadWorkbook(data, spec.sheet);
+                if (menuRef.current) menuRef.current.open = false;
+              }}>
               Excel workbook (all steps)
             </button>
-            <button type="button" className="menu-item" onClick={() => downloadCsv(spec, data)}>
+            <button type="button" className="menu-item" onClick={() => {
+                downloadCsv(spec, data);
+                if (menuRef.current) menuRef.current.open = false;
+              }}>
               CSV for {spec.sheet.toLowerCase()} only
             </button>
           </div>
@@ -171,6 +199,17 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
 
       {report && <ImportReport report={report} onClose={() => setReport(null)} />}
 
+      {undo && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-paper px-3 py-2 text-sm">
+          <span>
+            Deleted {undo.label}.
+          </span>
+          <button type="button" className="btn-quiet !py-1" onClick={restoreRow}>
+            Undo
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-md border border-line bg-paper">
         <table ref={tableRef} className="w-full border-collapse text-sm">
           <thead>
@@ -212,10 +251,10 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
                 <td className="px-1 text-center">
                   <button
                     type="button"
-                    onClick={() => setRows(rows.filter((_, j) => j !== i))}
+                    onClick={() => deleteRow(i)}
                     className="rounded px-2 py-1 text-ink-soft hover:bg-blush hover:text-err"
-                    aria-label={`Delete row ${i + 1}`}
-                    title="Delete row"
+                    aria-label={`Delete ${rowLabel(row, i)}`}
+                    title={`Delete ${rowLabel(row, i)}`}
                   >
                     ✕
                   </button>
@@ -251,6 +290,7 @@ function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [original, setOriginal] = useState("");
+  const errorId = useId();
 
   // Follow outside changes (import, rename, undo) while the admin isn't typing here.
   if (value !== prev) {
@@ -306,14 +346,16 @@ function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
     }
   };
 
+  const showError = error && (focused || col.kind === "text");
   return (
     <div>
       <input
         aria-label={label}
         aria-invalid={!!error}
+        aria-describedby={showError ? errorId : undefined}
         type="text"
         inputMode={col.kind === "number" ? "numeric" : undefined}
-        placeholder={col.placeholder}
+        placeholder={col.placeholder ? `e.g. ${col.placeholder}` : undefined}
         value={draft}
         onFocus={() => {
           setFocused(true);
@@ -333,9 +375,10 @@ function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
         }}
         className={`cell ${error ? "cell-invalid" : ""}`}
       />
-      {error && focused && <p className="px-1 pt-0.5 text-xs text-err">{error}</p>}
-      {error && !focused && col.kind === "text" && draft.trim() && (
-        <p className="px-1 pt-0.5 text-xs text-err">{error}</p>
+      {showError && (
+        <p id={errorId} className="px-1 pt-0.5 text-xs text-err">
+          {error}
+        </p>
       )}
     </div>
   );

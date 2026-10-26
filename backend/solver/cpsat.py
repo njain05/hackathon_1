@@ -256,6 +256,7 @@ def solve_model(
             entries.append(Entry(
                 day=s.days[d], period=p + 1, section_id=g.id, subject_id=o.subject_id,
                 teacher_id=o.teacher_id, room_id=rid, kind="elective", elective_group=g.id,
+                elective_sections=list(g.section_ids),
             ))
     day_pos = {name: i for i, name in enumerate(s.days)}
     entries.sort(key=lambda e: (day_pos[e.day], e.period, e.section_id))

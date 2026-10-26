@@ -179,6 +179,9 @@ class Entry(BaseModel):
     elective_group: str | None = Field(
         None, description="For kind 'elective': the group id. section_id is then the group id too."
     )
+    elective_sections: list[str] | None = Field(
+        None, description="For kind 'elective': the member sections, so each one's timetable shows it"
+    )
 
 
 class Problem(BaseModel):

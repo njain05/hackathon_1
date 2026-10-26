@@ -39,7 +39,7 @@ export async function call<T>(path: string, init?: RequestInit): Promise<T> {
   }
   markAwake();
   if (res.status === 422) {
-    throw new ApiError("Some entries are in the wrong format. Check the steps marked with a problem.");
+    throw new ApiError(await formatProblem(res), { cause: 422 });
   }
   if (!res.ok) {
     // The server's own plain-English reason (e.g. "No college with the code …"), when it gives one.
@@ -48,17 +48,43 @@ export async function call<T>(path: string, init?: RequestInit): Promise<T> {
       .then((b: { detail?: unknown }) => b.detail)
       .catch(() => null);
     throw new ApiError(
-      typeof detail === "string" ? detail : `The timetable server had a problem (error ${res.status}). Try again.`,
+      typeof detail === "string" ? detail : "The timetable server had a problem. Try again in a moment.",
       { cause: res.status },
     );
   }
+  if (res.status === 204) return null as T; // done, nothing to read (e.g. a delete)
   return (await res.json()) as T;
+}
+
+/** "Some details aren't right" → name the field and say why, e.g. "Title: should have at most 200 characters". */
+async function formatProblem(res: Response): Promise<string> {
+  const fallback = "Some of the details aren't in the right format. Check them and try again.";
+  const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+  if (typeof body?.detail === "string") return body.detail;
+  if (!Array.isArray(body?.detail)) return fallback;
+  const lines = (body.detail as { loc?: unknown[]; msg?: string }[]).slice(0, 3).map((e) => {
+    const field = [...(e.loc ?? [])].reverse().find((x) => typeof x === "string" && x !== "body");
+    const label = typeof field === "string" ? field.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "";
+    const msg = (e.msg ?? "is not valid").replace(/^(String|Value|Input) /, "");
+    return label ? `${label}: ${msg}` : msg;
+  });
+  return lines.length ? lines.join(". ") + "." : fallback;
 }
 
 /** Fill in optional names so the server gets complete data. */
 export function toApi(d: CollegeData): CollegeData {
+  const n = d.settings.periods_per_day;
   return {
     ...d,
+    // Breaks after the last period and extra per-period lengths are kept while
+    // the admin edits the number of periods; the server only gets what fits.
+    settings: {
+      ...d.settings,
+      breaks: d.settings.breaks.filter((b) => b.after_period < n),
+      period_lengths: d.settings.period_lengths
+        ? Array.from({ length: n }, (_, i) => d.settings.period_lengths?.[i] ?? d.settings.period_minutes)
+        : null,
+    },
     name: d.name.trim() || "My College",
     rooms: d.rooms.map((r) => ({ ...r, name: r.name.trim() || r.id })),
     sections: d.sections.map((s) => ({ ...s, name: s.name.trim() || s.id })),

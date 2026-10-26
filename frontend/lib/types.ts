@@ -13,6 +13,8 @@ export interface Break {
   after_period: number;
   minutes: number;
   labs_continue: boolean;
+  /** Which control edits it. Older setups don't have it (then the name decides). The server ignores it. */
+  kind?: "lunch" | "tea" | "other";
 }
 
 export interface Settings {
@@ -128,6 +130,8 @@ export interface Entry {
   kind: "lecture" | "lab" | "elective";
   /** For electives: the group id (section_id is the group id too). */
   elective_group?: string | null;
+  /** For electives: the member sections. */
+  elective_sections?: string[] | null;
 }
 
 export interface Issue {

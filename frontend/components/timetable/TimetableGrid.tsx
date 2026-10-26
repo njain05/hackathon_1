@@ -1,6 +1,6 @@
 "use client";
 
-import { buildRows, subjectColours, timeRange, type Cell, type ViewKind } from "@/lib/grid";
+import { buildRows, colourKey, subjectColours, timeRange, type Cell, type ViewKind } from "@/lib/grid";
 import type { CollegeData, Entry } from "@/lib/types";
 
 interface Props {
@@ -20,11 +20,14 @@ export function nameLookup(d: CollegeData) {
   const teachers = new Map(d.teachers.map((t) => [t.id, t.name || t.id]));
   const sections = new Map(d.sections.map((s) => [s.id, s.name || s.id]));
   const rooms = new Map(d.rooms.map((r) => [r.id, r.name || r.id]));
+  const groups = new Map((d.elective_groups ?? []).map((g) => [g.id, g.name || g.id]));
   return {
     subject: (id: string) => subjects.get(id)?.name ?? id,
     teacher: (id: string) => teachers.get(id) ?? id,
-    section: (id: string) => sections.get(id) ?? id,
+    // An elective's "section" is its group: show the group's name.
+    section: (id: string) => sections.get(id) ?? groups.get(id) ?? id,
     room: (id: string) => rooms.get(id) ?? id,
+    group: (id: string) => groups.get(id) ?? id,
   };
 }
 
@@ -44,21 +47,46 @@ function ClassContent({ cell, view, names, colours, compact }: {
   colours: Map<string, number>;
   compact?: boolean;
 }) {
+  // In a section's week, an open elective is one block listing every choice.
+  const group = cell.entries[0]?.elective_group;
+  if (view === "section" && group && cell.entries.every((e) => e.elective_group === group)) {
+    return (
+      <div className="flex h-full min-w-0 flex-col rounded px-2 py-1.5" style={subjectBg(colours.get(colourKey(cell.entries[0])))}>
+        <span className="flex items-baseline gap-2">
+          <span className="font-bold">{names.group(group)}</span>
+          <span className="rounded-sm bg-paper/80 px-1.5 text-xs font-semibold">Elective</span>
+        </span>
+        <ul className="mt-0.5 flex flex-col gap-0.5">
+          {cell.entries.map((e, i) => (
+            <li key={i} className="text-xs" title={`${names.subject(e.subject_id)}: ${names.teacher(e.teacher_id)}, ${names.room(e.room_id)}`}>
+              <span className="font-semibold">{names.subject(e.subject_id)}</span>
+              {/* The room is what a student needs most; the teacher is in the tooltip and for screen readers. */}
+              <span className="block truncate text-ink">
+                {names.room(e.room_id)}
+                <span className="sr-only">, {names.teacher(e.teacher_id)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   return (
     <div className="flex h-full flex-col gap-1">
       {cell.entries.map((e, i) => (
         <div
           key={i}
           className={`flex min-w-0 flex-1 flex-col rounded px-2 py-1.5 ${e.kind === "lab" ? "border-l-4 border-ink/25" : ""}`}
-          style={subjectBg(colours.get(e.subject_id))}
+          style={subjectBg(colours.get(colourKey(e)))}
         >
           <span className="flex items-baseline gap-2">
             <span className="font-bold">{e.subject_id}</span>
             {e.kind === "lab" && <span className="rounded-sm bg-paper/80 px-1.5 text-xs font-semibold">Lab</span>}
+            {e.kind === "elective" && <span className="rounded-sm bg-paper/80 px-1.5 text-xs font-semibold">Elective</span>}
           </span>
           <span className={`text-xs ${compact ? "" : "line-clamp-2"}`}>{names.subject(e.subject_id)}</span>
           {details(e, view, names).map((t, k) => (
-            <span key={k} className="truncate text-xs text-ink-soft">
+            <span key={k} className="truncate text-xs text-ink">
               {t}
             </span>
           ))}
@@ -82,7 +110,7 @@ export default function TimetableGrid({ data, entries, view, highlightDay, highl
   const grid = (
     <div className={layout === "auto" ? "hidden md:block print:block" : ""}>
       <div className="overflow-x-auto rounded-md border border-line bg-paper print:overflow-visible print:border-ink/30">
-        <table className="w-full table-fixed border-collapse text-sm">
+        <table className="w-full min-w-[56rem] table-fixed border-collapse text-sm print:min-w-0">
           <colgroup>
             <col className="w-24" />
             {blocks.map((b, i) => (
@@ -188,11 +216,19 @@ export function SubjectKey({ data, entries, view }: { data: CollegeData; entries
   const names = nameLookup(data);
   const colours = subjectColours(entries, data);
   const rows = [...colours.keys()].map((id) => {
-    const mine = entries.filter((e) => e.subject_id === id);
+    const mine = entries.filter((e) => colourKey(e) === id);
+    if (id.startsWith("group:")) {
+      // An open elective: its choices, and how many periods a week it meets.
+      const gid = id.slice("group:".length);
+      const periods = new Set(mine.map((e) => `${e.day} ${e.period}`)).size;
+      const choices = [...new Set(mine.map((e) => names.subject(e.subject_id)))];
+      return { id, code: names.group(gid), title: "", line: `${periods} period${periods === 1 ? "" : "s"} a week: ${choices.join(", ")}` };
+    }
     const lectures = mine.filter((e) => e.kind === "lecture").length;
     const labs = mine.filter((e) => e.kind === "lab").length;
     const who = [...new Set(mine.map((e) => (view === "teacher" ? names.section(e.section_id) : names.teacher(e.teacher_id))))];
-    return { id, lectures, labs, who };
+    const line = `${lectures} lecture${lectures === 1 ? "" : "s"}${labs ? ` + ${labs} lab periods` : ""} a week${who.length ? `, ${who.join(", ")}` : ""}`;
+    return { id, code: id, title: names.subject(id), line };
   });
   if (!rows.length) return null;
   return (
@@ -201,11 +237,8 @@ export function SubjectKey({ data, entries, view }: { data: CollegeData; entries
         <li key={r.id} className="flex items-start gap-2">
           <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm border border-line" style={subjectBg(colours.get(r.id))} aria-hidden />
           <span>
-            <span className="font-semibold">{r.id}</span> {names.subject(r.id)}
-            <span className="block text-ink-soft">
-              {r.lectures} lecture{r.lectures === 1 ? "" : "s"}
-              {r.labs ? ` + ${r.labs} lab periods` : ""} a week{r.who.length ? `, ${r.who.join(", ")}` : ""}
-            </span>
+            <span className="font-semibold">{r.code}</span> {r.title}
+            <span className="block text-ink-soft">{r.line}</span>
           </span>
         </li>
       ))}

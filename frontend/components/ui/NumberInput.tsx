@@ -32,8 +32,11 @@ export default function NumberInput({ value, min, max, onChange, unit, className
     if (!focused) setDraft(String(value));
   }
 
+  const [touched, setTouched] = useState(false);
   const parsed = Number(draft);
   const valid = draft !== "" && Number.isInteger(parsed) && parsed >= min && parsed <= max;
+  // Don't scold someone who has just cleared the box to type a new number.
+  const showHint = !valid && (draft !== "" || touched);
 
   const save = (n: number) => {
     if (n !== value) onChange(n);
@@ -53,10 +56,11 @@ export default function NumberInput({ value, min, max, onChange, unit, className
         inputMode="numeric"
         autoComplete="off"
         value={draft}
-        aria-invalid={!valid}
-        aria-describedby={!valid ? hintId : undefined}
+        aria-invalid={showHint}
+        aria-describedby={[showHint ? hintId : "", rest["aria-describedby"] ?? ""].filter(Boolean).join(" ") || undefined}
         onFocus={(e) => {
           setFocused(true);
+          setTouched(false);
           e.currentTarget.select(); // typing replaces the old number
           onFocus?.(e);
         }}
@@ -74,13 +78,16 @@ export default function NumberInput({ value, min, max, onChange, unit, className
         }}
         onBlur={(e) => {
           setFocused(false);
-          if (!valid) setDraft(String(value));
+          if (!valid) {
+            setDraft(String(value));
+            setTouched(true);
+          }
           onBlur?.(e);
         }}
-        className={`${className ?? "field"} ${valid ? "" : "!border-err"}`}
+        className={`${className ?? "field"} ${showHint ? "!border-err" : ""}`}
       />
-      {!valid && (
-        <span id={hintId} role="alert" className="text-xs text-err">
+      {showHint && (
+        <span id={hintId} aria-live="polite" className="text-xs text-err">
           Enter a number from {min} to {max}
           {unit ? ` ${unit}` : ""}.
         </span>

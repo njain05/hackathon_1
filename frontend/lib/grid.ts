@@ -29,8 +29,12 @@ const cellKey = (es: Entry[]) => es.map(entryKey).sort().join("+");
 /** Entries for one section / teacher / room. */
 export function entriesFor(entries: Entry[], view: ViewKind, id: string): Entry[] {
   const field = VIEW_FIELD[view];
-  return entries.filter((e) => e[field] === id);
+  // A section's week also includes the open electives its students choose from.
+  return entries.filter((e) => e[field] === id || (view === "section" && e.elective_sections?.includes(id)));
 }
+
+/** Colour slot key: an elective's options share the group's colour. */
+export const colourKey = (e: Entry) => (e.kind === "elective" && e.elective_group ? `group:${e.elective_group}` : e.subject_id);
 
 /**
  * One row per working day. Columns follow the real day: periods and breaks
@@ -105,9 +109,9 @@ export const SUBJECT_COLOURS = 12;
 
 /** Colour slot per subject, in order of first appearance, so one view never repeats a colour early. */
 export function subjectColours(entries: Entry[], d: CollegeData): Map<string, number> {
-  const order = new Map(d.subjects.map((s, i) => [s.id, i]));
-  const ids = [...new Set(entries.map((e) => e.subject_id))].sort(
-    (a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0),
-  );
+  // Subjects in setup order, then elective groups; keys come from colourKey().
+  const order = new Map<string, number>(d.subjects.map((s, i) => [s.id, i]));
+  (d.elective_groups ?? []).forEach((g, i) => order.set(`group:${g.id}`, d.subjects.length + i));
+  const ids = [...new Set(entries.map(colourKey))].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
   return new Map(ids.map((id, i) => [id, (i % SUBJECT_COLOURS) + 1]));
 }

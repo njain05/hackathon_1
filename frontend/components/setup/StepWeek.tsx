@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { WEEK_DAYS } from "@/lib/templates";
 import { departmentsTable } from "@/lib/tables";
 import type { Break, CollegeData, Settings } from "@/lib/types";
@@ -12,8 +13,35 @@ interface Props {
   onChange: (d: CollegeData) => void;
 }
 
-const isLunch = (b: Break) => /lunch/i.test(b.name);
-const isTea = (b: Break) => !isLunch(b) && /tea/i.test(b.name);
+// A break's kind decides which control edits it, so renaming it never moves it.
+// Older setups have no kind: fall back to the name.
+const isLunch = (b: Break) => (b.kind ? b.kind === "lunch" : /lunch/i.test(b.name));
+const isTea = (b: Break) => (b.kind ? b.kind === "tea" : !/lunch/i.test(b.name) && /tea/i.test(b.name));
+
+/** A time box you can clear and retype: saves only a complete time, restores the last good one on leaving. */
+function TimeField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const [prev, setPrev] = useState(value);
+  if (value !== prev) {
+    setPrev(value);
+    setDraft(value);
+  }
+  return (
+    <input
+      id={id}
+      type="time"
+      value={draft}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        if (/^\d{2}:\d{2}$/.test(e.target.value)) onChange(e.target.value);
+      }}
+      onBlur={() => {
+        if (!/^\d{2}:\d{2}$/.test(draft)) setDraft(value);
+      }}
+      className="field w-36"
+    />
+  );
+}
 
 const FIVE_DAYS = WEEK_DAYS.slice(0, 5);
 const SIX_DAYS = WEEK_DAYS.slice(0, 6);
@@ -94,6 +122,8 @@ function NumberField({
   max,
   onChange,
   suffix,
+  disabled,
+  note,
 }: {
   id: string;
   label: string;
@@ -102,6 +132,8 @@ function NumberField({
   max: number;
   onChange: (n: number) => void;
   suffix?: string;
+  disabled?: boolean;
+  note?: string;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -109,9 +141,24 @@ function NumberField({
         {label}
       </label>
       <div className="flex items-center gap-2">
-        <NumberInput id={id} min={min} max={max} unit={suffix} value={value} onChange={onChange} className="field w-24" />
+        <NumberInput
+          id={id}
+          min={min}
+          max={max}
+          unit={suffix}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          aria-describedby={note ? `${id}-note` : undefined}
+          className="field w-24 disabled:opacity-60"
+        />
         {suffix && <span className="hint">{suffix}</span>}
       </div>
+      {note && (
+        <p id={`${id}-note`} className="hint">
+          {note}
+        </p>
+      )}
     </div>
   );
 }
@@ -119,10 +166,11 @@ function NumberField({
 export default function StepWeek({ data, onChange }: Props) {
   const s = data.settings;
   const setSettings = (patch: Partial<Settings>) => {
+    // Breaks and per-period lengths are kept even if the number of periods drops
+    // for a moment (typing 1 on the way to 10). The preview ignores what doesn't
+    // fit, and lib/api.ts toApi() trims it before anything goes to the server.
     const next = { ...s, ...patch };
-    // Keep breaks and per-period lengths valid when the number of periods changes.
-    next.breaks = next.breaks.filter((b) => b.after_period < next.periods_per_day);
-    if (next.period_lengths && next.period_lengths.length !== next.periods_per_day) {
+    if (next.period_lengths && next.period_lengths.length < next.periods_per_day) {
       next.period_lengths = Array.from({ length: next.periods_per_day }, (_, i) => next.period_lengths?.[i] ?? next.period_minutes);
     }
     onChange({ ...data, settings: next });
@@ -221,13 +269,7 @@ export default function StepWeek({ data, onChange }: Props) {
           <label htmlFor="day-start" className="field-label">
             First period starts at
           </label>
-          <input
-            id="day-start"
-            type="time"
-            value={s.day_start}
-            onChange={(e) => e.target.value && setSettings({ day_start: e.target.value })}
-            className="field w-36"
-          />
+          <TimeField id="day-start" value={s.day_start} onChange={(v) => setSettings({ day_start: v })} />
         </div>
 
         <NumberField
@@ -238,6 +280,8 @@ export default function StepWeek({ data, onChange }: Props) {
           max={240}
           suffix="minutes"
           onChange={(n) => setSettings({ period_minutes: n })}
+          disabled={!!s.period_lengths}
+          note={s.period_lengths ? "Periods have their own lengths (Advanced options below)." : undefined}
         />
 
         <BreakControl
@@ -247,7 +291,7 @@ export default function StepWeek({ data, onChange }: Props) {
           current={lunch}
           taken={s.breaks.filter((b) => b !== lunch).map((b) => b.after_period)}
           periods={periodChoices}
-          make={(p) => ({ name: "Lunch", after_period: p, minutes: 40, labs_continue: false })}
+          make={(p) => ({ name: "Lunch", kind: "lunch", after_period: p, minutes: 40, labs_continue: false })}
           onChange={(b) => replaceBreak(lunch, b)}
         />
 
@@ -258,7 +302,7 @@ export default function StepWeek({ data, onChange }: Props) {
           current={tea}
           taken={s.breaks.filter((b) => b !== tea).map((b) => b.after_period)}
           periods={periodChoices}
-          make={(p) => ({ name: "Tea break", after_period: p, minutes: 10, labs_continue: true })}
+          make={(p) => ({ name: "Tea break", kind: "tea", after_period: p, minutes: 10, labs_continue: true })}
           onChange={(b) => replaceBreak(tea, b)}
           showLabsToggle
         />
@@ -313,7 +357,7 @@ export default function StepWeek({ data, onChange }: Props) {
                 disabled={!periodChoices.some((p) => !s.breaks.some((b) => b.after_period === p))}
                 onClick={() => {
                   const free = periodChoices.find((p) => !s.breaks.some((b) => b.after_period === p));
-                  if (free) replaceBreak(undefined, { name: "Break", after_period: free, minutes: 15, labs_continue: false });
+                  if (free) replaceBreak(undefined, { name: "Break", kind: "other", after_period: free, minutes: 15, labs_continue: false });
                 }}
               >
                 Add a break

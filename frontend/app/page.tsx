@@ -1,8 +1,11 @@
 import Link from "next/link";
+import AppNav from "@/components/AppNav";
 import HealthStatus from "@/components/HealthStatus";
 
 export default function Home() {
   return (
+    <>
+    <AppNav />
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-6 px-4 py-16">
       <h1 className="text-4xl font-bold sm:text-5xl">College Timetable</h1>
       <p className="max-w-xl text-lg text-ink-soft">
@@ -22,5 +25,6 @@ export default function Home() {
         <HealthStatus />
       </div>
     </main>
+    </>
   );
 }

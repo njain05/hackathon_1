@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
 import PublishBar from "@/components/share/PublishBar";
+import { useAccess } from "@/lib/access";
+import { toApi } from "@/lib/api";
 import { entriesFor, type ViewKind } from "@/lib/grid";
+import { useLocal } from "@/lib/local";
 import { useStoredTimetable } from "@/lib/result";
 import type { CollegeData, Entry } from "@/lib/types";
 import { QualityPanel, VerifiedBadge } from "./QualityPanel";
@@ -62,8 +65,28 @@ function PrintableTimetable({ data, entries, view, id, label }: {
   );
 }
 
+/** JSON with sorted keys, so two copies of the same setup compare equal. */
+function stableJson(v: unknown): string {
+  return JSON.stringify(v, (_k, val: unknown) =>
+    val && typeof val === "object" && !Array.isArray(val)
+      ? Object.fromEntries(Object.entries(val as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : val,
+  );
+}
+
 export default function TimetablePage() {
   const stored = useStoredTimetable();
+  const access = useAccess();
+  const draftRaw = useLocal("timetable.setup.v1");
+  // Has the setup changed since this timetable was generated?
+  const stale = useMemo(() => {
+    if (!stored || !draftRaw) return false;
+    try {
+      return stableJson(toApi(JSON.parse(draftRaw) as CollegeData)) !== stableJson(toApi(stored.data));
+    } catch {
+      return false;
+    }
+  }, [stored, draftRaw]);
   const [view, setView] = useState<ViewKind>("section");
   const [picked, setPicked] = useState<Partial<Record<ViewKind, string>>>({});
   const [printAll, setPrintAll] = useState(false);
@@ -73,9 +96,21 @@ export default function TimetablePage() {
     return (
       <>
         <AppNav />
-        <EmptyState title="No timetable yet">
-          Enter your college in the setup, then press Generate timetable on the last step. It will appear here.
-        </EmptyState>
+        {access && !access.staff && access.viewing ? (
+          <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-4 px-4 py-16">
+            <h1 className="text-3xl font-bold">Looking for your classes?</h1>
+            <p className="text-lg text-ink-soft">This page is where the timetable in-charge reviews every timetable.</p>
+            <div>
+              <Link href="/my" className="btn-primary !px-5 !py-3 !text-base">
+                Open my timetable
+              </Link>
+            </div>
+          </main>
+        ) : (
+          <EmptyState title="No timetable yet">
+            Enter your college in the setup, then press Generate timetable on the last step. It will appear here.
+          </EmptyState>
+        )}
       </>
     );
 
@@ -117,18 +152,28 @@ export default function TimetablePage() {
           </div>
         </div>
 
+        {stale && (
+          <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-blush px-4 py-3">
+            <p>
+              <span className="font-semibold">Your setup has changed since this timetable was generated.</span>{" "}
+              Generate it again so the changes are included before you publish.
+            </p>
+            <Link href="/setup" className="btn-quiet">
+              Go to setup
+            </Link>
+          </div>
+        )}
         <PublishBar stored={stored} />
         <VerifiedBadge result={result} />
         <QualityPanel result={result} />
 
         <div className="flex flex-wrap items-end gap-4">
-          <div role="tablist" aria-label="Whose timetable" className="flex rounded-md border border-line bg-paper p-1">
+          <div role="group" aria-label="Whose timetable" className="flex rounded-md border border-line bg-paper p-1">
             {VIEWS.map((v) => (
               <button
                 key={v.id}
                 type="button"
-                role="tab"
-                aria-selected={view === v.id}
+                aria-pressed={view === v.id}
                 onClick={() => setView(v.id)}
                 className={`rounded px-4 py-2 text-sm font-semibold ${view === v.id ? "bg-sky/50" : "hover:bg-blush"}`}
               >
@@ -148,7 +193,7 @@ export default function TimetablePage() {
           </label>
         </div>
 
-        <section role="tabpanel" aria-label={label} className="flex flex-col gap-4">
+        <section aria-label={label} className="flex flex-col gap-4">
           <h2 className="text-xl font-bold">{label}</h2>
           {mine.length === 0 ? (
             <p className="text-ink-soft">No classes are scheduled for this {noun.toLowerCase()}.</p>

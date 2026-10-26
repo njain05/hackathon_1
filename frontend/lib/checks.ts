@@ -67,10 +67,12 @@ export function localChecks(d: CollegeData): Finding[] {
     if (s.strength < 1) err("sections", `Section ${s.id || "(no code)"} has no student count.`);
     if (!depts.has(s.department_id)) err("sections", `Section ${s.id} has no department.`, "Pick a department.");
   }
+  // Subjects offered as open-elective choices get their periods from the elective group.
+  const electiveSubjects = new Set((d.elective_groups ?? []).flatMap((g) => g.options.map((o) => o.subject_id)));
   for (const s of d.subjects) {
     if (!s.name.trim()) err("subjects", `Subject ${s.id || "(no code)"} has no name.`);
     if (!depts.has(s.department_id)) err("subjects", `Subject ${s.id} has no department.`, "Pick a department.");
-    if (s.lecture_hours + s.lab_hours === 0)
+    if (s.lecture_hours + s.lab_hours === 0 && !electiveSubjects.has(s.id))
       warn("subjects", `${s.name || s.id} has no lectures or lab periods, so it won't appear in the timetable.`);
     if (s.lab_hours && s.lab_hours % s.lab_block_length)
       err("subjects", `${s.name || s.id} has ${s.lab_hours} lab periods, which don't split into blocks of ${s.lab_block_length}.`,
