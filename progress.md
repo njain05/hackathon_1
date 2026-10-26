@@ -3,6 +3,28 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: Roles end to end (user's model): Dean → HODs → in-charge; teachers; students; clubs** (my part; P1 did the timetable approval steps, the UX session the menus)
+  - **Rooms**:
+    - a teacher books **any free room** (halls first, then classrooms and labs) from their teacher page or /book with their link on the device; it goes to **their HOD, then the Dean**;
+    - a student club (public form) goes **straight to the Dean**;
+    - the Dean sees every request and may act at any step; an HOD sees and acts only on their own teachers' requests;
+    - who approves is fixed per request (`booking_routes`, a new table); older bookings keep the old chain;
+    - the teacher page lists "Your room requests"; the HOD page has "Room requests from your teachers";
+    - the Dean's Approvals page explains "Who approves" (the old chain editor is gone).
+  - **Leave**:
+    - the teacher's HOD approves; **each class's own HOD arranges its cover** (user's choice for cross-department teaching), and the Dean can do everything;
+    - `cover`, `changes` and `extra-slots` accept an HOD link, limited to their department's sections;
+    - the HOD page has "Leave cover" (day picker, ranked substitutes, Assign / Cancel / Undo).
+  - **Lab cover rule** (Dean, college-wide, `college_rules`):
+    - "A different teacher each hour" (default; e.g. two teachers × 1 hour for a 2-hour lab) or "One teacher for the whole lab";
+    - per-hour rows say "hour 1 of 2", and cancelling cancels the whole lab.
+  - **Fairer substitutes**: after subject, department and the day's load, fewer covers this week rank higher ("covered 2 this week").
+  - The HOD page shows "<Dept>'s timetable data: <state> · Review it" (prominent when waiting for the HOD), from P1's department review.
+  - Visible text says **Dean** instead of admin.
+  - **Tested**:
+    - backend 89 pass (bookings, leave, short days);
+    - in the browser: a teacher booked classroom C-101 → "Waiting for HOD (CSE)" → HOD approved ("It now goes to the Dean") → Dean approved ("The room is booked");
+    - the HOD page shows the department status, leave cover and room requests.
 - **2026-10-27: P8 Reports and exports** (P1 session, `b730506`)
   - **`/reports`** (staff only): three reports from the last generated timetable, each with a plain-words explanation.
     - Teacher workload: periods a week for each teacher against their department's average. Anyone at 1.5x the average (and at least 4 above it), or over their own weekly limit, is flagged in red with the reason. Sort by most periods, department or name.

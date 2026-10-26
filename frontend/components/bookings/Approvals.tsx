@@ -44,8 +44,8 @@ export function RequestCard({ b, data, auth, canAct, onDone }: {
         action === "reject"
           ? `Rejected “${b.title}”. The organiser can see your note on their tracking page.`
           : after.status === "approved"
-            ? `Approved “${b.title}”. The hall is booked and it is on the events calendar.`
-            : `Approved “${b.title}”. It now goes to ${after.waiting_for}.`,
+            ? `Approved “${b.title}”. The room is booked and it is on the events calendar.`
+            : `Approved “${b.title}”. It now goes to the ${after.waiting_for}.`,
       );
     } catch (e) {
       setError(errorText(e, "Couldn't save your decision. Try again."));

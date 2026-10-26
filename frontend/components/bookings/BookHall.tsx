@@ -7,7 +7,7 @@ import AppNav from "@/components/AppNav";
 import { ApiError } from "@/lib/api";
 import {
   type Availability,
-  eventRooms,
+  bookableRooms,
   getAvailability,
   periodText,
   rememberBooking,
@@ -16,6 +16,7 @@ import {
   useMyBookings,
 } from "@/lib/bookings";
 import { setViewedCollege } from "@/lib/cloud";
+import { useMemberAccess } from "@/lib/members";
 import { dayBlocks, formatTime } from "@/lib/periods";
 import type { CollegeData } from "@/lib/types";
 import { CollegeNeeded, usePublishedCollege } from "./common";
@@ -115,10 +116,14 @@ export default function BookHall() {
     };
   }, [code, roomId, date, key, reload]);
 
-  const rooms = useMemo(() => (college.kind === "ready" ? eventRooms(college.data) : []), [college]);
+  const options = useMemo(() => (college.kind === "ready" ? bookableRooms(college.data) : []), [college]);
+  const rooms = useMemo(() => options.map((o) => o.room), [options]);
+  // A teacher's link on this device: the request goes to their HOD, then the Dean (else, a club's: to the Dean).
+  const teacherLink = useMemberAccess("teacher");
 
   if (college.kind === "loading") return <p className="p-8 text-ink-soft">Loading…</p>;
-  if (college.kind === "none") return <CollegeNeeded title="Book a hall" error={college.error} />;
+  if (college.kind === "none") return <CollegeNeeded title="Book a room" error={college.error} />;
+  const teacher = teacherLink && teacherLink.college_code === college.college.code ? teacherLink : null;
 
   const { data } = college;
   const room = rooms.find((r) => r.id === roomId);
@@ -135,8 +140,8 @@ export default function BookHall() {
     ...(!form.title.trim() ? [{ id: "book-title", text: "Give the event a name." }] : []),
     ...(!(attendees >= 1) ? [{ id: "book-attendees", text: "Say how many people you expect." }] : []),
     ...(tooMany ? [{ id: "book-attendees", text: `${room?.name || room?.id} seats only ${room?.capacity}. Choose a bigger hall or fewer people.` }] : []),
-    ...(!form.organiser.trim() ? [{ id: "book-organiser", text: "Add your name." }] : []),
-    ...(!form.club.trim() ? [{ id: "book-club", text: "Add your club or department." }] : []),
+    ...(!form.organiser.trim() && !teacher ? [{ id: "book-organiser", text: "Add your name." }] : []),
+    ...(!form.club.trim() && !teacher ? [{ id: "book-club", text: "Add your club or department." }] : []),
     ...(form.contact.trim().length < 3 ? [{ id: "book-contact", text: "Add a phone number or email." }] : []),
   ];
 
@@ -154,8 +159,9 @@ export default function BookHall() {
     try {
       const b = await requestBooking(college.college.code, {
         room_id: roomId, date, start_period: start, end_period: end, title: form.title.trim(), purpose: form.purpose.trim(),
-        attendees, organiser: form.organiser.trim(), club: form.club.trim(), contact: form.contact.trim(),
-      });
+        attendees, organiser: form.organiser.trim() || teacher?.name || "", club: form.club.trim() || teacher?.department_name || "",
+        contact: form.contact.trim(),
+      }, teacher);
       rememberBooking(b);
       router.push(`/track/${encodeURIComponent(b.token)}`);
     } catch (err) {
@@ -179,10 +185,13 @@ export default function BookHall() {
       <AppNav collegeName={college.college.name} />
       <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold sm:text-3xl">Book a hall</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">Book a room</h1>
           <p className="text-ink-soft">
-            Pick a hall and a date, choose free periods, and send your request. It goes to {college.college.name}’s
-            approvers one by one, and you can follow it with your tracking link. No letters needed.{" "}
+            Pick a hall or any room and a date, choose free periods, and send your request.{" "}
+            {teacher
+              ? `As ${teacher.name}, it goes to your HOD, then the Dean.`
+              : "A student club’s request goes to the Dean. (Teachers: book from your teacher page so it goes to your HOD first.)"}{" "}
+            Follow it with your tracking link. No letters needed.{" "}
             <Link href="/events" className="font-semibold text-navy underline">
               See the events calendar
             </Link>
@@ -191,15 +200,14 @@ export default function BookHall() {
 
         {rooms.length === 0 ? (
           <p className="rounded-md border border-line bg-paper p-4">
-            {college.college.name} has no seminar halls or auditoriums set up for bookings yet. The timetable in-charge can
-            add one in the setup (a room whose type is used for events).
+            {college.college.name} has no rooms in its published timetable yet.
           </p>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-6">
             <fieldset className="flex flex-col gap-2">
-              <legend className="mb-2 text-lg font-bold">1. Which hall?</legend>
+              <legend className="mb-2 text-lg font-bold">1. Which room?</legend>
               <div className="grid gap-2 sm:grid-cols-2">
-                {rooms.map((r) => (
+                {options.map(({ room: r, kind }) => (
                   <label
                     key={r.id}
                     className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 ${roomId === r.id ? "border-navy bg-sky/30" : "border-line bg-paper hover:bg-blush"}`}
@@ -207,7 +215,9 @@ export default function BookHall() {
                     <input type="radio" name="room" id={r.id === rooms[0]?.id ? "book-room" : undefined} value={r.id} checked={roomId === r.id} onChange={() => setRoomId(r.id)} />
                     <span>
                       <span className="block font-semibold">{r.name || r.id}</span>
-                      <span className="text-sm text-ink-soft">Seats {r.capacity}</span>
+                      <span className="text-sm text-ink-soft">
+                        {kind} · seats {r.capacity}
+                      </span>
                     </span>
                   </label>
                 ))}
@@ -280,11 +290,11 @@ export default function BookHall() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="flex flex-col gap-1">
                   <span className="field-label">Your name</span>
-                  <input id="book-organiser" className="field" maxLength={120} autoComplete="name" {...field("organiser")} />
+                  <input id="book-organiser" className="field" maxLength={120} autoComplete="name" placeholder={teacher?.name} {...field("organiser")} />
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="field-label">Club or department</span>
-                  <input id="book-club" className="field" maxLength={120} placeholder="e.g. Coding Club" {...field("club")} />
+                  <input id="book-club" className="field" maxLength={120} placeholder={teacher?.department_name ?? "e.g. Coding Club"} {...field("club")} />
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="field-label">Phone or email</span>

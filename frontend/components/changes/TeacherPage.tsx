@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { ApiError } from "@/lib/api";
-import { periodText, since } from "@/lib/bookings";
+import { type Booking, getMyBookings, periodText, since } from "@/lib/bookings";
+import { StatusBadge, whereItIs } from "@/components/bookings/common";
 import { type Leave, LEAVE_STATUS, addLeave, getMyLeaves, isoDate, shortDate } from "@/lib/changes";
 import { getPublished } from "@/lib/cloud";
 import { type MemberAccess, setMemberAccess, useMemberAccess, useOpenMemberLink } from "@/lib/members";
@@ -115,6 +116,49 @@ function LeaveRequestForm({ teacher, data, onSent }: { teacher: MemberAccess; da
   );
 }
 
+/** The teacher's room requests: where each one is (their HOD, then the Dean). */
+function MyRoomRequests({ teacher }: { teacher: MemberAccess }) {
+  const [list, setList] = useState<Booking[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    getMyBookings(teacher)
+      .then(setList)
+      .catch((e: unknown) => setError(errorText(e, "Couldn't load your room requests.")));
+  }, [teacher]);
+  return (
+    <section aria-label="Your room requests" className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="mr-auto text-xl font-bold">Your room requests</h2>
+        <Link href="/book" className="btn-primary">
+          Book a room
+        </Link>
+      </div>
+      <p className="text-ink-soft">For an event, a study session or anything else: any room that’s free. It goes to your HOD, then the Dean.</p>
+      {error && <p className="font-semibold text-err">{error}</p>}
+      {!list && !error && <p className="text-ink-soft">Loading…</p>}
+      {list && list.length === 0 && <p className="text-ink-soft">No room requests yet.</p>}
+      {list && list.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {list.map((b) => (
+            <li key={b.id} className="flex flex-col gap-1 rounded-md border border-line bg-paper p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href={`/track/${encodeURIComponent(b.token)}`} className="mr-auto font-semibold text-navy underline">
+                  {b.title}
+                </Link>
+                <StatusBadge status={b.status} />
+              </div>
+              <span className="text-sm text-ink-soft">
+                {b.room_name} · {shortDate(b.date)}, periods {b.start_period}–{b.end_period}
+              </span>
+              <span>{whereItIs(b)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** A teacher's own page, opened only from their private link: ask for leave and follow it. */
 export default function TeacherPage() {
   const opening = useOpenMemberLink("teacher");
@@ -178,7 +222,8 @@ export default function TeacherPage() {
           <p className="text-sm font-semibold text-ink-soft">Teacher page · {teacher.department_name}</p>
           <h1 className="text-2xl font-bold sm:text-3xl">Hello, {teacher.name}</h1>
           <p className="text-ink-soft">
-            Ask for leave here. It goes to your HOD, then the timetable in-charge arranges cover. Your week is on{" "}
+            Ask for leave or book a room here. Leave goes to your HOD, who arranges cover; rooms go to your HOD, then the
+            Dean. Your week is on{" "}
             <Link href="/my" className="font-semibold text-navy underline">
               My timetable
             </Link>
@@ -226,6 +271,8 @@ export default function TeacherPage() {
             </ul>
           )}
         </section>
+
+        <MyRoomRequests teacher={teacher} />
 
         {data && today && myDay.day && (
           <ChangesFeed data={data} me={{ role: "teacher", id: teacher.teacher_id ?? "" }} date={today} upcoming={myDay.upcoming} />

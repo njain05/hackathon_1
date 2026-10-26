@@ -232,6 +232,15 @@ export function eventRooms(d: CollegeData): Room[] {
   return d.rooms.filter((r) => uses.get(r.type) === "event");
 }
 
+/** Every room can be booked in periods with no class: halls first, then the rest by type. */
+export function bookableRooms(d: CollegeData): { room: Room; kind: string }[] {
+  const types = new Map(d.room_types.map((t) => [t.id, t]));
+  const rank = (r: Room) => (types.get(r.type)?.use === "event" ? 0 : types.get(r.type)?.use === "lecture" ? 1 : 2);
+  return [...d.rooms]
+    .sort((a, b) => rank(a) - rank(b) || (types.get(a.type)?.name ?? "").localeCompare(types.get(b.type)?.name ?? "") || a.id.localeCompare(b.id))
+    .map((room) => ({ room, kind: types.get(room.type)?.name ?? room.type }));
+}
+
 /** "Periods 3–4, 11:40–13:20" from the college's own clock times. */
 export function periodText(d: CollegeData, start: number, end: number): string {
   const periods = dayBlocks(d.settings).filter((b) => b.kind === "period");

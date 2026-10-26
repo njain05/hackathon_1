@@ -12,6 +12,7 @@ import type { CollegeData } from "@/lib/types";
 import InchargeLink from "@/components/department/InchargeLink";
 import RoomSharing from "@/components/department/RoomSharing";
 import HodRequests from "@/components/bookings/HodRequests";
+import { type DepartmentState, STATE_TEXT, departmentStatus } from "@/lib/departments";
 import HodCover from "./HodCover";
 import { LeaveBadge, leaveStatusText } from "./TeacherPage";
 
@@ -75,6 +76,32 @@ function Request({ lv, hod, data, onDone }: { lv: Leave; hod: MemberAccess; data
       )}
       {error && <p className="font-semibold text-err">{error}</p>}
     </li>
+  );
+}
+
+/** "CSE's timetable data: Waiting for the HOD · Review it": prominent when the HOD has something to approve. */
+function DepartmentReview({ hod }: { hod: MemberAccess }) {
+  const [state, setState] = useState<DepartmentState | null>(null);
+  useEffect(() => {
+    departmentStatus({ member: hod })
+      .then((all) => setState(all.find((d) => d.department_id === hod.department_id) ?? null))
+      .catch(() => undefined); // the department section below still links there
+  }, [hod]);
+  if (!state) return null;
+  const todo = state.state === "submitted";
+  return (
+    <p
+      role={todo ? "status" : undefined}
+      className={`flex flex-wrap items-center gap-3 rounded-md px-3 py-2 ${todo ? "bg-blush font-semibold" : "border border-line bg-paper"}`}
+    >
+      <span className="mr-auto">
+        {hod.department_name}’s timetable data: {STATE_TEXT[state.state]}
+        {state.note && <span className="font-normal text-ink-soft"> · “{state.note}”</span>}
+      </span>
+      <Link href="/department" className={todo ? "btn-primary !py-1" : "btn-quiet !py-1"}>
+        {todo ? "Review and approve" : "Review it"}
+      </Link>
+    </p>
   );
 }
 
@@ -144,6 +171,8 @@ export default function HodPage() {
             covered by their own HOD.
           </p>
         </div>
+
+        <DepartmentReview hod={hod} />
 
         {message && (
           <p role="status" className="rounded-md bg-mint px-3 py-2 font-semibold">

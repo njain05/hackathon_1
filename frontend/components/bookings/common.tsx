@@ -63,7 +63,7 @@ export function StatusBadge({ status }: { status: Booking["status"] }) {
 export function whereItIs(b: Booking): string {
   if (b.status === "pending") return `Waiting for ${b.waiting_for}${b.waiting_since ? ` since ${since(b.waiting_since)}` : ""}`;
   const last = b.history[b.history.length - 1];
-  if (b.status === "approved") return `Approved${last ? ` by ${last.step_title}` : ""}. The hall is yours.`;
+  if (b.status === "approved") return `Approved${last ? ` by ${last.step_title}` : ""}. The room is yours.`;
   if (b.status === "rejected") return `Not approved${last ? ` by ${last.step_title}` : ""}`;
   return "Cancelled by the organiser";
 }
@@ -110,7 +110,7 @@ export function BookingFacts({ b, data }: { b: Booking; data: CollegeData | null
   const room = data?.rooms.find((r) => r.id === b.room_id);
   return (
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
-      <dt className="font-semibold">Hall</dt>
+      <dt className="font-semibold">Room</dt>
       <dd>
         {b.room_name}
         {room && <span className="text-ink-soft"> (seats {room.capacity})</span>}
