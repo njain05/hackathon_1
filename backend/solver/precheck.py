@@ -8,7 +8,7 @@ Each problem names the setup `step` where it can be fixed.
 
 from collections import Counter, defaultdict
 
-from .common import Index, lab_rooms, lab_segments, lab_teacher, lecture_rooms
+from .common import Index, elective_rooms, lab_rooms, lab_segments, lab_teacher, lecture_rooms
 from .models import CollegeData, Problem, Room
 
 
@@ -75,6 +75,9 @@ def validate_data(data: CollegeData) -> list[Problem]:
             bad("rooms", f'Room {r.name} belongs to unknown department "{r.department_id}".')
         if r.type not in idx.room_types:
             bad("rooms", f'Room {r.name} has unknown room type "{r.type}".')
+        for d in r.shared_with:
+            if d not in idx.departments:
+                bad("rooms", f'Room {r.name} is shared with unknown department "{d}".')
 
     pairs: set[tuple[str, str]] = set()
     for a in data.assignments:
@@ -90,6 +93,26 @@ def validate_data(data: CollegeData) -> list[Problem]:
             bad("subjects", f'The class "{where}" is listed twice.',
                 "Keep one row per subject per section.")
         pairs.add((a.section_id, a.subject_id))
+
+    for d in _dupes([g.id for g in data.elective_groups]):
+        bad("subjects", f'Two elective groups share the code "{d}".', "Give every elective group a different code.")
+    for g in data.elective_groups:
+        if g.id in idx.sections:
+            bad("subjects", f'Elective group "{g.id}" has the same code as a section.', "Use a different code, e.g. OE-1.")
+        for sid in g.section_ids:
+            if sid not in idx.sections:
+                bad("subjects", f'Elective group {g.name} lists unknown section "{sid}".')
+        seen_teachers: set[str] = set()
+        for o in g.options:
+            if o.subject_id not in idx.subjects:
+                bad("subjects", f'Elective group {g.name} offers unknown subject "{o.subject_id}".')
+            if o.teacher_id not in idx.teachers:
+                bad("subjects", f'Elective group {g.name} uses unknown teacher "{o.teacher_id}".')
+            elif o.teacher_id in seen_teachers:
+                bad("subjects",
+                    f"{idx.teachers[o.teacher_id].name} teaches two options of {g.name}, which run at the same time.",
+                    "Give each option of an elective group a different teacher.")
+            seen_teachers.add(o.teacher_id)
     return problems
 
 
@@ -108,6 +131,8 @@ def teacher_capacity(data: CollegeData, teacher_id: str) -> int:
     for day in s.days:
         free = s.periods_per_day - len({p for p in blocked[day] if 1 <= p <= s.periods_per_day})
         total += min(free, t.max_periods_per_day) if t.max_periods_per_day else free
+    if t.max_periods_per_week is not None:
+        total = min(total, t.max_periods_per_week)
     return total
 
 
@@ -153,6 +178,23 @@ def find_shortages(data: CollegeData) -> list[Problem]:
                 ))
             lab_demand[frozenset(r.id for r in rooms)] += sub.lab_hours
 
+    for g in data.elective_groups:
+        for sid in g.section_ids:
+            section_need[sid] += g.periods_per_week
+        for o in g.options:
+            teacher_need[o.teacher_id] += g.periods_per_week
+            rooms = elective_rooms(data, o)
+            sub = idx.subjects[o.subject_id]
+            if not rooms:
+                problems.append(Problem(
+                    kind="no_room", step="rooms",
+                    message=f"No classroom can hold the {o.students} students of {sub.name} ({g.name}) that "
+                    f"{sub.department_id} may use.",
+                    suggestion=f"Ask another department's HOD to share a big enough room with {sub.department_id}, "
+                    "or add a shared classroom.",
+                ))
+            lecture_demand[frozenset(r.id for r in rooms)] += g.periods_per_week
+
     for sid, need in section_need.items():
         if need > slots:
             problems.append(Problem(
@@ -167,7 +209,7 @@ def find_shortages(data: CollegeData) -> list[Problem]:
         cap = teacher_capacity(data, tid)
         if need > cap:
             why = (f"the week has only {slots} teaching periods" if cap == slots
-                   else f"after their unavailable times and daily limit they can teach only {cap}")
+                   else f"after their unavailable times and limits they can teach only {cap}")
             problems.append(Problem(
                 kind="teacher_overload", step="subjects",
                 message=f"{t.name} is assigned {need} periods a week, but {why}.",

@@ -190,3 +190,94 @@ def test_few_workers_still_give_a_clash_free_timetable(monkeypatch: pytest.Monke
     result = solve(sample_college(), time_limit_seconds=10)
     assert result.status == "solved"
     assert result.check is not None and result.check.ok
+
+
+# ---------- Open electives, room sharing, weekly cap ----------
+
+from solver.models import ElectiveGroup, ElectiveOption, Entry  # noqa: E402
+
+
+def _with_open_elective(ece_students: int = 55) -> CollegeData:
+    """CSE-5A and ECE-5A pick one of two open electives that run at the same time."""
+    data = sample_college()
+    data.subjects += [
+        Subject(id="OE101", code="OE101", name="AI for Everyone", department_id="CSE", lecture_hours=0),
+        Subject(id="OE102", code="OE102", name="Basics of IoT", department_id="ECE", lecture_hours=0),
+    ]
+    data.elective_groups = [ElectiveGroup(
+        id="OE-1", name="Open Elective 1", section_ids=["CSE-5A", "ECE-5A"], periods_per_week=2,
+        options=[
+            ElectiveOption(subject_id="OE101", teacher_id="RK", students=50),
+            ElectiveOption(subject_id="OE102", teacher_id="KA", students=ece_students),
+        ],
+    )]
+    return data
+
+
+def test_open_elective_runs_all_options_at_the_same_time() -> None:
+    result = solve(_with_open_elective())
+    assert result.status == "solved", result.problems
+    assert result.check is not None and result.check.ok, result.check
+    el = [e for e in result.entries if e.kind == "elective"]
+    assert len(el) == 4  # 2 options x 2 periods
+    slots = {(e.subject_id): {(x.day, x.period) for x in el if x.subject_id == e.subject_id} for e in el}
+    assert slots["OE101"] == slots["OE102"]  # parallel
+    # Member sections have nothing else at those times.
+    for sec in ("CSE-5A", "ECE-5A"):
+        busy = {(e.day, e.period) for e in result.entries if e.section_id == sec}
+        assert not busy & slots["OE101"]
+
+
+def test_elective_needs_a_shared_room_when_its_department_has_none_big_enough() -> None:
+    data = _with_open_elective(ece_students=66)  # ECE rooms seat 65 and 50
+    data.rooms = [r for r in data.rooms if r.id != "LT-1"]  # no big shared room
+    result = solve(data)
+    assert result.status == "infeasible"
+    assert any(p.kind == "no_room" and "share" in p.suggestion for p in result.problems)
+
+    for r in data.rooms:
+        if r.id == "C-101":
+            r.capacity, r.shared_with = 70, ["ECE"]  # CSE's HOD shares C-101 with ECE
+    result = solve(data)
+    assert result.status == "solved", result.problems
+    assert result.check is not None and result.check.ok
+    iot = {e.room_id for e in result.entries if e.subject_id == "OE102"}
+    assert iot == {"C-101"}
+
+
+def test_same_teacher_cannot_take_two_options_of_one_elective() -> None:
+    data = _with_open_elective()
+    data.elective_groups[0].options[1].teacher_id = "RK"
+    result = solve(data)
+    assert result.status == "invalid"
+    assert any("two options" in p.message for p in result.problems)
+
+
+def test_weekly_cap_is_respected_in_prechecks() -> None:
+    data = sample_college()
+    next(t for t in data.teachers if t.id == "HK").max_periods_per_week = 10  # HK is given 14
+    result = solve(data)
+    assert result.status == "infeasible"
+    assert any(p.kind == "teacher_overload" and "Harpreet" in p.message for p in result.problems)
+
+
+def test_checker_flags_elective_options_at_different_times() -> None:
+    data = _with_open_elective()
+    def e(sub: str, t: str, room: str, day: str, p: int) -> Entry:
+        return Entry(day=day, period=p, section_id="OE-1", subject_id=sub, teacher_id=t,
+                     room_id=room, kind="elective", elective_group="OE-1")
+    entries = [e("OE101", "RK", "C-101", "Monday", 1), e("OE101", "RK", "C-101", "Tuesday", 1),
+               e("OE102", "KA", "E-201", "Monday", 1), e("OE102", "KA", "E-201", "Wednesday", 1)]
+    kinds = {v.kind for v in check_timetable(data, entries).violations}
+    assert "elective_split" in kinds
+
+
+def test_shared_room_is_allowed_for_the_department_it_was_shared_with() -> None:
+    data = sample_college()
+    for r in data.rooms:
+        if r.id == "C-101":
+            r.shared_with = ["ECE"]
+    ok = Entry(day="Monday", period=1, section_id="ECE-3A", subject_id="EC201", teacher_id="BS", room_id="C-101", kind="lecture")
+    assert "room_department" not in {v.kind for v in check_timetable(data, [ok]).violations}
+    data.rooms[0].shared_with = []
+    assert "room_department" in {v.kind for v in check_timetable(data, [ok]).violations}
