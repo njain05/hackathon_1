@@ -81,6 +81,9 @@ export function toApi(d: CollegeData): CollegeData {
     settings: {
       ...d.settings,
       breaks: d.settings.breaks.filter((b) => b.after_period < n),
+      periods_by_day: Object.fromEntries(
+        Object.entries(d.settings.periods_by_day ?? {}).filter(([day, p]) => d.settings.days.includes(day) && p >= 1 && p < n),
+      ),
       period_lengths: d.settings.period_lengths
         ? Array.from({ length: n }, (_, i) => d.settings.period_lengths?.[i] ?? d.settings.period_minutes)
         : null,

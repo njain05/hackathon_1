@@ -284,7 +284,12 @@ interface CellProps<T> {
 }
 
 function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
-  const value = col.kind === "select" ? String((row as Record<string, unknown>)[col.key] ?? "") : col.get(row, data);
+  const value =
+    col.kind === "select"
+      ? col.selectValue
+        ? col.selectValue(row)
+        : String((row as Record<string, unknown>)[col.key] ?? "")
+      : col.get(row, data);
   const [draft, setDraft] = useState(value);
   const [prev, setPrev] = useState(value);
   const [focused, setFocused] = useState(false);

@@ -34,8 +34,9 @@ export function nameLookup(d: CollegeData) {
 /** What a cell shows besides the subject depends on whose timetable it is. */
 function details(e: Entry, view: ViewKind, n: ReturnType<typeof nameLookup>): string[] {
   if (view === "section") return [n.teacher(e.teacher_id), n.room(e.room_id)];
-  if (view === "teacher") return [n.section(e.section_id), n.room(e.room_id)];
-  return [n.section(e.section_id), n.teacher(e.teacher_id)];
+  const who = e.batch ? `${n.section(e.section_id)}, batch ${e.batch}` : n.section(e.section_id);
+  if (view === "teacher") return [who, n.room(e.room_id)];
+  return [who, n.teacher(e.teacher_id)];
 }
 
 const subjectBg = (slot: number | undefined) => ({ background: `var(--color-subject-${slot ?? 1})` });
@@ -81,7 +82,9 @@ function ClassContent({ cell, view, names, colours, compact }: {
         >
           <span className="flex items-baseline gap-2">
             <span className="font-bold">{e.subject_id}</span>
-            {e.kind === "lab" && <span className="rounded-sm bg-paper/80 px-1.5 text-xs font-semibold">Lab</span>}
+            {e.kind === "lab" && (
+              <span className="rounded-sm bg-paper/80 px-1.5 text-xs font-semibold">{e.batch ? `Lab ${e.batch}` : "Lab"}</span>
+            )}
             {e.kind === "elective" && <span className="rounded-sm bg-paper/80 px-1.5 text-xs font-semibold">Elective</span>}
           </span>
           <span className={`text-xs ${compact ? "" : "line-clamp-2"}`}>{names.subject(e.subject_id)}</span>
@@ -154,11 +157,14 @@ export default function TimetableGrid({ data, entries, view, highlightDay, highl
                     <td
                       key={i}
                       colSpan={c.span}
-                      className={`h-24 border-l border-line p-1 align-top ${c.type === "break" ? "bg-mint/50" : ""} ${
+                      className={`h-24 border-l border-line p-1 align-top ${c.type === "break" ? "bg-mint/50" : c.type === "off" ? "bg-cream" : ""} ${
                         isNow(row.day, c) ? "outline-3 -outline-offset-2 outline-navy" : ""
                       }`}
                     >
                       {c.type === "class" && <ClassContent cell={c} view={view} names={names} colours={colours} />}
+                      {c.type === "off" && (
+                        <span className="flex h-full items-center justify-center text-sm text-ink-soft">No classes after {timeRange(c.start, c.end).split("–")[0]}</span>
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -186,7 +192,7 @@ export default function TimetableGrid({ data, entries, view, highlightDay, highl
                 {today && " (today)"}
               </h3>
               <ul className="flex flex-col gap-1.5">
-                {row.cells.map((c, i) => (
+                {row.cells.filter((c) => c.type !== "off").map((c, i) => (
                   <li
                     key={i}
                     className={`grid grid-cols-[5.5rem_1fr] gap-3 rounded-md ${c.type === "break" ? "bg-mint/60 px-2 py-1 text-sm" : ""} ${

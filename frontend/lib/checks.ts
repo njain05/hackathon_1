@@ -1,6 +1,7 @@
 // Instant checks in the browser for missing or inconsistent entries.
 // Deeper "is this even possible?" checks run on the server (/check).
 
+import { periodsOn } from "./periods";
 import type { CollegeData, StepId } from "./types";
 
 export interface Finding {
@@ -82,6 +83,13 @@ export function localChecks(d: CollegeData): Finding[] {
         "Add a lab room of the right type.");
   }
 
+  for (const a of d.assignments) {
+    const sec = d.sections.find((x) => x.id === a.section_id);
+    if (a.lab_by_batch && sec && !sec.batches?.length)
+      err("subjects", `${a.subject_id} for ${sec.id} has labs in batches, but ${sec.id} has no batches.`,
+        "Add batches in Sections (Advanced options), or set “Labs in batches” to No.");
+  }
+
   const sections = new Set(d.sections.map((x) => x.id));
   const subjects = new Set(d.subjects.map((x) => x.id));
   const teachers = new Set(d.teachers.map((x) => x.id));
@@ -125,7 +133,7 @@ export function localChecks(d: CollegeData): Finding[] {
 /** Weekly load per teacher and section, for the overview bars. */
 export function loads(d: CollegeData) {
   const s = d.settings;
-  const weekSlots = s.days.length * s.periods_per_day;
+  const weekSlots = s.days.reduce((n, day) => n + periodsOn(s, day), 0);
   const subj = new Map(d.subjects.map((x) => [x.id, x]));
   const tNeed = new Map<string, number>();
   const sNeed = new Map<string, number>();
@@ -134,7 +142,10 @@ export function loads(d: CollegeData) {
     if (!sub) continue;
     tNeed.set(a.teacher_id, (tNeed.get(a.teacher_id) ?? 0) + sub.lecture_hours);
     const lt = a.lab_teacher_id ?? a.teacher_id;
-    tNeed.set(lt, (tNeed.get(lt) ?? 0) + sub.lab_hours);
+    // Lab batches do their labs separately: the lab teacher teaches each batch.
+    const sec = d.sections.find((x) => x.id === a.section_id);
+    const groups = a.lab_by_batch && sec?.batches?.length ? sec.batches.length : 1;
+    tNeed.set(lt, (tNeed.get(lt) ?? 0) + sub.lab_hours * groups);
     sNeed.set(a.section_id, (sNeed.get(a.section_id) ?? 0) + sub.lecture_hours + sub.lab_hours);
   }
   for (const g of d.elective_groups ?? []) {
@@ -147,7 +158,7 @@ export function loads(d: CollegeData) {
     let total = 0;
     for (const day of s.days) {
       const blocked = new Set(t.unavailable.filter((u) => u.day === day).map((u) => u.period)).size;
-      const free = s.periods_per_day - blocked;
+      const free = periodsOn(s, day) - blocked;
       total += t.max_periods_per_day ? Math.min(free, t.max_periods_per_day) : free;
     }
     return t.max_periods_per_week ? Math.min(total, t.max_periods_per_week) : total;

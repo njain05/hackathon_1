@@ -18,6 +18,12 @@ export function formatTime(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/** Teaching periods on a day (a short day, e.g. Saturday, may have fewer). */
+export function periodsOn(s: Settings, day: string): number {
+  const n = s.periods_by_day?.[day];
+  return n && n >= 1 && n <= s.periods_per_day ? n : s.periods_per_day;
+}
+
 export function periodLength(s: Settings, period: number): number {
   return s.period_lengths?.[period - 1] ?? s.period_minutes;
 }

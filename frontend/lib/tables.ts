@@ -36,6 +36,8 @@ export interface Column<T> {
   options?: (d: CollegeData) => Option[];
   /** What a select column writes to Excel: its code (default) or its label. */
   exportAs?: "value" | "label";
+  /** For a select whose field isn't a plain string (e.g. a yes/no boolean): the option to show selected. */
+  selectValue?: (row: T) => string;
   get: (row: T, d: CollegeData) => string;
   /** Returns the updated row, or an error message for import. */
   set: (row: T, raw: string, d: CollegeData) => T | string;
@@ -334,6 +336,29 @@ export const sectionsTable: TableSpec<Section> = {
     ref("department_id", "Department", departmentOptions, { required: true, aliases: ["Dept"] }),
     num("strength", "Students", { required: true, min: 1, aliases: ["Strength", "Students count"] }),
     text("name", "Name (optional)", { aliases: ["Name", "Section name"], placeholder: "CSE 3rd Sem A" }),
+    {
+      key: "batches",
+      header: "Lab batches",
+      aliases: ["Batches", "Lab groups"],
+      kind: "text",
+      advanced: true,
+      placeholder: "A1:30, A2:30",
+      help: "Groups that do labs separately, with how many students in each.",
+      get: (row) => (row.batches ?? []).map((b) => `${b.id}:${b.strength}`).join(", "),
+      set: (row, raw) => {
+        const parts = raw.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+        const batches = [];
+        for (const part of parts) {
+          const m = part.match(/^([^:\s]+)\s*[:=\s]\s*(\d+)$/);
+          if (!m) return `Write batches like "A1:30, A2:30" (name, then students), not "${part}".`;
+          batches.push({ id: m[1], strength: Number(m[2]) });
+        }
+        const ids = batches.map((b) => b.id.toLowerCase());
+        if (new Set(ids).size !== ids.length) return "Two batches have the same name.";
+        if (batches.some((b) => b.strength < 1)) return "Each batch needs at least 1 student.";
+        return { ...row, batches };
+      },
+    },
   ],
   blank: (d) => ({ id: "", name: "", department_id: d.departments[0]?.id ?? "", strength: 60 }),
   identity: (r) => norm(r.id),
@@ -414,6 +439,27 @@ export const assignmentsTable: TableSpec<Assignment> = {
       aliases: ["Lab faculty"],
       help: "Only if someone else takes the lab.",
     }),
+    {
+      key: "lab_by_batch",
+      header: "Labs in batches",
+      aliases: ["Batch labs", "In batches"],
+      kind: "select",
+      advanced: true,
+      help: "Each lab batch of the section does this lab on its own.",
+      options: () => [
+        { value: "", label: "No" },
+        { value: "yes", label: "Yes" },
+      ],
+      exportAs: "label",
+      selectValue: (row) => (row.lab_by_batch ? "yes" : ""),
+      get: (row) => (row.lab_by_batch ? "Yes" : "No"),
+      set: (row, raw) => {
+        const v = raw.trim().toLowerCase();
+        if (["", "no", "n", "false", "0"].includes(v)) return { ...row, lab_by_batch: false };
+        if (["yes", "y", "true", "1"].includes(v)) return { ...row, lab_by_batch: true };
+        return `Labs in batches should be Yes or No, not "${raw.trim()}".`;
+      },
+    },
     {
       key: "load",
       header: "Periods a week",

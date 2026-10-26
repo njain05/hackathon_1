@@ -1,4 +1,4 @@
-import { dayBlocks, formatTime } from "@/lib/periods";
+import { dayBlocks, formatTime, periodsOn } from "@/lib/periods";
 import type { Settings } from "@/lib/types";
 
 /** The admin's real day, drawn to scale: periods and breaks with clock times. */
@@ -46,6 +46,15 @@ export default function DayPreview({ settings }: { settings: Settings }) {
         {teachingHours} hours of teaching a day
         {settings.days.length ? `, ${settings.days.length} days a week.` : ". No working days chosen yet."}
       </p>
+      {settings.days.filter((d) => periodsOn(settings, d) < settings.periods_per_day).map((d) => {
+        const n = periodsOn(settings, d);
+        const end = blocks.filter((b) => b.kind === "period")[n - 1]?.end;
+        return (
+          <p key={d} className="text-xs text-ink-soft">
+            {d}: {n} period{n === 1 ? "" : "s"}{end !== undefined ? `, ends ${formatTime(end)}` : ""}.
+          </p>
+        );
+      })}
     </figure>
   );
 }

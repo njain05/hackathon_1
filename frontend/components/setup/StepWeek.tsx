@@ -395,6 +395,38 @@ export default function StepWeek({ data, onChange }: Props) {
               </div>
             )}
           </div>
+
+          <div className="flex flex-col gap-2">
+            <h3 className="field-label">Shorter days</h3>
+            <p className="hint">
+              If a day has fewer periods, like a half-day Saturday, set it here. Nothing is scheduled after its last period.
+            </p>
+            {s.days.length === 0 ? (
+              <p className="hint">Choose the working days first.</p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {s.days.map((day) => {
+                  const n = s.periods_by_day?.[day] ?? s.periods_per_day;
+                  return (
+                    <label key={day} className="flex flex-col gap-1 text-sm">
+                      {day}
+                      <NumberInput
+                        min={1}
+                        max={s.periods_per_day}
+                        unit="periods"
+                        value={Math.min(n, s.periods_per_day)}
+                        onChange={(v) => {
+                          const rest = Object.fromEntries(Object.entries(s.periods_by_day ?? {}).filter(([d]) => d !== day));
+                          setSettings({ periods_by_day: v < s.periods_per_day ? { ...rest, [day]: v } : rest });
+                        }}
+                        className="field w-20"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </details>
 

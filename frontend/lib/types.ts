@@ -24,6 +24,8 @@ export interface Settings {
   period_minutes: number;
   period_lengths: number[] | null;
   breaks: Break[];
+  /** Optional shorter days, e.g. { Saturday: 4 }. Other days have periods_per_day. */
+  periods_by_day?: Record<string, number>;
 }
 
 export interface Department {
@@ -31,11 +33,19 @@ export interface Department {
   name: string;
 }
 
+/** A group of a section's students that does labs on its own (e.g. A1, A2). */
+export interface Batch {
+  id: string;
+  strength: number;
+}
+
 export interface Section {
   id: string;
   name: string;
   department_id: string;
   strength: number;
+  /** Optional lab batches. */
+  batches?: Batch[];
 }
 
 export interface Subject {
@@ -69,6 +79,8 @@ export interface Assignment {
   subject_id: string;
   teacher_id: string;
   lab_teacher_id: string | null;
+  /** Each of the section's batches gets its own lab sessions. */
+  lab_by_batch?: boolean;
 }
 
 export interface Room {
@@ -128,6 +140,8 @@ export interface Entry {
   teacher_id: string;
   room_id: string;
   kind: "lecture" | "lab" | "elective";
+  /** For a batch lab: which batch (e.g. "A1"). */
+  batch?: string | null;
   /** For electives: the group id (section_id is the group id too). */
   elective_group?: string | null;
   /** For electives: the member sections. */

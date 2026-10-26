@@ -1,7 +1,7 @@
 // Turns solver entries into rows for the timetable grid and the day list.
 // Pure functions: no React, nothing college-specific.
 
-import { dayBlocks, formatTime, type TimeBlock } from "./periods";
+import { dayBlocks, formatTime, periodsOn, type TimeBlock } from "./periods";
 import type { CollegeData, Entry } from "./types";
 
 export type ViewKind = "section" | "teacher" | "room";
@@ -16,7 +16,9 @@ export const VIEW_FIELD: Record<ViewKind, keyof Entry> = {
 export type Cell =
   | { type: "class"; entries: Entry[]; firstPeriod: number; lastPeriod: number; span: number; start: number; end: number }
   | { type: "break"; label: string; start: number; end: number; span: 1 }
-  | { type: "free"; period: number; start: number; end: number; span: 1 };
+  | { type: "free"; period: number; start: number; end: number; span: 1 }
+  /** After a short day's last period (e.g. Saturday afternoon): one cell for the rest of the day. */
+  | { type: "off"; start: number; end: number; span: number };
 
 export interface Row {
   day: string;
@@ -52,8 +54,16 @@ export function buildRows(d: CollegeData, entries: Entry[]): { blocks: TimeBlock
       at.set(e.period, [...(at.get(e.period) ?? []), e]);
     }
     const cells: Cell[] = [];
+    const dayEnd = periodsOn(d.settings, day);
     for (let i = 0; i < blocks.length; i++) {
       const b = blocks[i];
+      // A short day: everything after its last period (breaks included) is one "no classes" cell.
+      const lastPeriodBefore = Number([...blocks.slice(0, i + 1)].reverse().find((x) => x.kind === "period")?.label ?? 0);
+      const pastEnd = b.kind === "period" ? Number(b.label) > dayEnd : lastPeriodBefore >= dayEnd;
+      if (pastEnd && dayEnd < d.settings.periods_per_day) {
+        cells.push({ type: "off", start: b.start, end: blocks[blocks.length - 1].end, span: blocks.length - i });
+        break;
+      }
       if (b.kind === "break") {
         cells.push({ type: "break", label: b.label, start: b.start, end: b.end, span: 1 });
         continue;
