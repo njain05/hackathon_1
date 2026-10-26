@@ -3,6 +3,25 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: P8 Reports and exports** (P1 session, `b730506`)
+  - **`/reports`** (staff only): three reports from the last generated timetable, each with a plain-words explanation.
+    - Teacher workload: periods a week for each teacher against their department's average. Anyone at 1.5x the average (and at least 4 above it), or over their own weekly limit, is flagged in red with the reason. Sort by most periods, department or name.
+    - Room usage: how much of the week each classroom and lab is used. Rooms under 20% are listed as "could be freed".
+    - Section load: periods of class a week and where the free periods fall.
+  - **Download Excel (all timetables)** (`lib/exports.ts`, `ExportButtons`): one workbook with a sheet per section, teacher and room.
+  - **Add to my calendar** (`CalendarExport`): an `.ics` file of your own week that repeats weekly, for Google or Apple Calendar.
+  - e2e `reports.spec.ts` (6 tests). Checked: tsc, lint, full e2e 12/12.
+  - Waiting on the UX session to mount them (it's editing those files): the Reports link in AppNav, ExportButtons on /timetable, CalendarExport on /my.
+- **2026-10-27: P7 Lab batches and short days** (P1 session, `fdbe243` solver, `744270b` screens)
+  - A section can have lab batches (e.g. A1:30, A2:30). An assignment marked "Labs in batches" gives each batch its own lab, and batches may run labs at the same time in different labs. The section has no lecture while any batch is in a lab.
+  - "Shorter days" in the Week step: any day can have fewer periods (e.g. a 4-period Saturday). The grid shows "No classes after HH:MM" for the rest of that day.
+  - The pre-check counts batched labs per batch for teachers and labs, and once for the section. The independent checker checks each batch's capacity and hours, and doesn't count parallel batches as a clash.
+  - 7 new solver tests. e2e `batches.spec.ts`.
+- **2026-10-27: P10 (first part) End-to-end tests, phone polish, README** (P1 session, `fa06ba7`)
+  - Playwright e2e (`npm run e2e`): sample → generate → verified; publish → /my with the code; book a hall → approve → on the calendar; every screen at 1280px and on a Pixel 7 with no sideways scroll.
+  - README rewritten with screenshots (`docs/screenshots/`, refresh with `UPDATE_SCREENSHOTS=1 npm run e2e`), architecture, 5 admin steps, limitations.
+  - Secrets scan of the code and git history: clean. The only matches are made-up test passwords in `backend/tests/test_colleges.py` and `backend/demo_checks.py`.
+  - Still to do for P10: make the repo public (the user said "Not yet"), deploy, test the live link on a phone, commit "submission".
 - **2026-10-27: Simpler navigation, "Who are you?" Home and an admin Today page** (UX session)
   - **Top bar (`components/AppNav.tsx`)**: links in order of use for whoever holds this device. Wide screens show 4 links and put the rest under **More ▾**. Below 768px a single **☰ Menu** button replaces the rows of links. Menus close on Escape, an outside click, or after navigating. Every access-gated link keeps its old condition (Teacher, HOD, Department, Changes, People, Approvals; Setup and Timetables staff-only). The college name falls back to the admin link's name.
   - **Home (`components/home/RolePicker.tsx`)**: four cards: Student → /my, Teacher → /teacher (with a teacher link) or /my, Event organiser → /book, Timetable admin → /today (with the admin link) or /setup.
@@ -391,7 +410,7 @@ Update after every completed step. Newest entries at the top of each section.
 
 ## Next
 1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
-2. Push P4 and the leave approval when the user says so. **The user asked for no deploys during their 3:30 meeting**, and a push redeploys Render and Vercel. P3 is already live.
+2. Push P7, P8 and the UX work when the user says so (a push to main redeploys Render and Vercel). Then re-run the secrets scan, ask about making the repo public, and test the live link on a phone.
 3. Add `ANTHROPIC_API_KEY` to `backend/.env` (local) and to Render's Environment, set a spending limit in the Anthropic console, and try a few questions live.
 
 ## Problems & fixes
