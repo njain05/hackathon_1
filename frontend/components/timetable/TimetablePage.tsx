@@ -11,7 +11,7 @@ import { entriesFor, type ViewKind } from "@/lib/grid";
 import { useLocal } from "@/lib/local";
 import { useStoredTimetable } from "@/lib/result";
 import type { CollegeData, Entry } from "@/lib/types";
-import { QualityPanel, VerifiedBadge } from "./QualityPanel";
+import { CheckSummary } from "./QualityPanel";
 import TimetableGrid, { SubjectKey } from "./TimetableGrid";
 
 const VIEWS: { id: ViewKind; label: string; noun: string }[] = [
@@ -165,8 +165,7 @@ export default function TimetablePage() {
           </div>
         )}
         <PublishBar stored={stored} />
-        <VerifiedBadge result={result} />
-        <QualityPanel result={result} />
+        <CheckSummary result={result} />
 
         <div className="flex flex-wrap items-end gap-4">
           <div role="group" aria-label="Whose timetable" className="flex rounded-md border border-line bg-paper p-1">

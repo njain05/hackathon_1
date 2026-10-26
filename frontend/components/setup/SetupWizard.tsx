@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import AppNav from "@/components/AppNav";
+import MoreMenu from "@/components/ui/MoreMenu";
 import { AdminLinkNotice, CloudSave, useOpenAdminLink } from "@/components/share/CloudSave";
 import { readAdminAccess, setAdminAccess } from "@/lib/cloud";
 import { ApiError, getSample } from "@/lib/api";
@@ -225,12 +226,6 @@ export default function SetupWizard() {
       <header className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
         {/* The college name is already in the menu bar above. */}
         <p className="mr-auto text-sm font-semibold text-ink-soft">Timetable setup</p>
-        <button type="button" className="btn-quiet" onClick={() => downloadWorkbook(data)}>
-          Download Excel workbook
-        </button>
-        <button type="button" className="btn-quiet" onClick={() => fileRef.current?.click()}>
-          Import workbook
-        </button>
         <input
           ref={fileRef}
           type="file"
@@ -243,24 +238,30 @@ export default function SetupWizard() {
             e.target.value = "";
           }}
         />
-        <button
-          type="button"
-          className="btn-quiet"
-          onClick={() => {
-            const online = readAdminAccess();
-            const message = online
-              ? `Start over? This clears the setup from this browser and disconnects it from ${online.code}. The copy saved online stays as it is; open your admin link to continue it later.`
-              : "Start over? Everything entered so far will be cleared from this browser.";
-            if (window.confirm(message)) {
-              // Disconnect first, so autosave can't upload the empty setup over the online copy.
-              setAdminAccess(null);
-              replaceData(null);
-              setReport(null);
-            }
-          }}
-        >
-          Start over
-        </button>
+        {/* Less-used actions in one menu, so the steps come first. */}
+        <MoreMenu
+          label="Excel & more"
+          actions={[
+            { label: "Download Excel workbook", onClick: () => downloadWorkbook(data) },
+            { label: "Import workbook", onClick: () => fileRef.current?.click() },
+            {
+              label: "Start over",
+              danger: true,
+              onClick: () => {
+                const online = readAdminAccess();
+                const message = online
+                  ? `Start over? This clears the setup from this browser and disconnects it from ${online.code}. The copy saved online stays as it is; open your admin link to continue it later.`
+                  : "Start over? Everything entered so far will be cleared from this browser.";
+                if (window.confirm(message)) {
+                  // Disconnect first, so autosave can't upload the empty setup over the online copy.
+                  setAdminAccess(null);
+                  replaceData(null);
+                  setReport(null);
+                }
+              },
+            },
+          ]}
+        />
       </header>
 
       {notice}

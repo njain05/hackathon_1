@@ -28,53 +28,54 @@ const PENALTIES: { key: string; title: string; explain: (n: number) => string }[
   },
 ];
 
-export function VerifiedBadge({ result }: { result: SolveResult }) {
+/** One line: "Verified: 0 clashes · Quality score 32". Opens to show the clash counts and each penalty. */
+export function CheckSummary({ result }: { result: SolveResult }) {
   const clashes = result.check?.clashes ?? [];
   const count = (kind: string) => clashes.filter((c) => c.kind === kind).length;
   const total = clashes.length + (result.check?.violations.length ?? 0);
   const ok = result.check?.ok && total === 0;
-  return (
-    <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border px-4 py-3 ${ok ? "border-ok/40 bg-mint" : "border-err/40 bg-blush"}`}>
-      <span className={`text-lg font-bold ${ok ? "text-ok" : "text-err"}`}>
-        {ok ? "Verified: 0 clashes" : `${total} problem${total === 1 ? "" : "s"} found`}
-      </span>
-      <span className="text-sm">
-        Teacher clashes {count("teacher_clash")}, section clashes {count("section_clash")}, room clashes {count("room_clash")}
-      </span>
-      <span className="w-full text-sm text-ink-soft">
-        Checked separately from the solver: no teacher, section or room is ever in two places at once, every lab is in a lab
-        room, and every room is big enough.
-      </span>
-    </div>
-  );
-}
-
-export function QualityPanel({ result }: { result: SolveResult }) {
   const s = result.stats;
-  if (!s) return null;
   return (
-    <details className="rounded-md border border-line bg-paper p-4">
-      <summary className="cursor-pointer">
-        <span className="font-bold">Quality score {s.score}</span>
-        <span className="text-ink-soft">
-          {" "}
-          (lower is better, 0 is perfect{s.optimal ? "; this is the best possible for this data" : ""})
+    <details open={!ok} className={`rounded-md border px-4 py-2 ${ok ? "border-ok/40 bg-paper" : "border-err/40 bg-blush"}`}>
+      <summary className="cursor-pointer py-1">
+        <span className={`font-bold ${ok ? "text-ok" : "text-err"}`}>
+          <span aria-hidden>{ok ? "✓ " : "✕ "}</span>
+          {ok ? "Verified: 0 clashes" : `${total} problem${total === 1 ? "" : "s"} found`}
         </span>
+        {s && (
+          <span className="text-ink-soft">
+            {" "}
+            · Quality score <span className="font-semibold text-ink">{s.score}</span> (lower is better
+            {s.optimal ? ", best possible for this data" : ""})
+          </span>
+        )}
+        <span className="hint"> · Details</span>
       </summary>
-      <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-        {PENALTIES.map((p) => {
-          const n = s.penalties[p.key] ?? 0;
-          return (
-            <li key={p.key} className="flex gap-3">
-              <span className={`mt-0.5 min-w-9 rounded-sm px-1.5 text-center font-bold ${n ? "bg-blush" : "bg-mint"}`}>{n}</span>
-              <span>
-                <span className="block font-semibold">{p.title}</span>
-                <span className="text-sm text-ink-soft">{p.explain(n)}</span>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="flex flex-col gap-3 pb-2 pt-2">
+        <p className="text-sm">
+          Teacher clashes {count("teacher_clash")}, section clashes {count("section_clash")}, room clashes {count("room_clash")}.{" "}
+          <span className="text-ink-soft">
+            Checked separately from the solver: no teacher, section or room is ever in two places at once, every lab is in a
+            lab room, and every room is big enough.
+          </span>
+        </p>
+        {s && (
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {PENALTIES.map((p) => {
+              const n = s.penalties[p.key] ?? 0;
+              return (
+                <li key={p.key} className="flex gap-3">
+                  <span className={`mt-0.5 min-w-9 rounded-sm px-1.5 text-center font-bold ${n ? "bg-blush" : "bg-mint"}`}>{n}</span>
+                  <span>
+                    <span className="block font-semibold">{p.title}</span>
+                    <span className="text-sm text-ink-soft">{p.explain(n)}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </details>
   );
 }

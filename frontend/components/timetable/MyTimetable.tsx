@@ -162,6 +162,7 @@ export default function MyTimetable() {
   const local = useStoredTimetable();
   const { state: source, refresh } = useViewerTimetable(local);
   const [changing, setChanging] = useState(false);
+  const [picking, setPicking] = useState(false); // show the full "I am a…" picker again
   const rawMe = useLocal(ME_KEY);
   const clock = useClock();
   // Today's real timetable (with leave cover, cancellations, extra classes) from the server.
@@ -260,51 +261,68 @@ export default function MyTimetable() {
           </section>
         )}
 
-        <div className="flex flex-wrap items-end gap-4 print:hidden">
-          <div role="group" aria-label="I am a" className="flex rounded-md border border-line bg-paper p-1">
-            {(["section", "teacher"] as const).map((r) => (
-              <button
-                key={r}
-                type="button"
-                aria-pressed={activeRole === r}
-                onClick={() => {
-                  setRole(r);
-                  // Remember the role too; each role keeps its own section or name.
-                  if (me) {
-                    const ids = { [me.role]: me.id || undefined, ...me.ids };
-                    writeLocal(ME_KEY, JSON.stringify({ role: r, id: ids[r] ?? "", ids }));
-                  }
-                }}
-                className={`rounded px-4 py-2 text-sm font-semibold ${activeRole === r ? "bg-sky/50" : "hover:bg-blush"}`}
-              >
-                {r === "section" ? "I'm a student" : "I'm a teacher"}
-              </button>
-            ))}
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className="field-label">{activeRole === "section" ? "Your section" : "Your name"}</span>
-            <select
-              value={myId}
-              onChange={(e) => {
-                const ids = { ...me?.ids, [activeRole]: e.target.value || undefined };
-                writeLocal(ME_KEY, JSON.stringify({ role: activeRole, id: e.target.value, ids }));
-              }}
-              className="field min-w-64"
-            >
-              <option value="">Choose…</option>
-              {options.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {myId && (
-            <button type="button" className="btn-quiet" onClick={() => window.print()}>
+        {myId && !picking ? (
+          // Already chosen: one line, so Today and the week come first.
+          <div className="flex flex-wrap items-center gap-3 print:hidden">
+            <p>
+              <span className="text-ink-soft">{activeRole === "section" ? "Your section:" : "Your name:"}</span>{" "}
+              <span className="font-semibold">{options.find((o) => o.id === myId)?.label ?? myId}</span>
+            </p>
+            <button type="button" className="font-semibold text-navy underline" onClick={() => setPicking(true)}>
+              Change
+            </button>
+            <button type="button" className="btn-quiet ml-auto" onClick={() => window.print()}>
               Print my timetable
             </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-end gap-4 print:hidden">
+            <div role="group" aria-label="I am a" className="flex rounded-md border border-line bg-paper p-1">
+              {(["section", "teacher"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  aria-pressed={activeRole === r}
+                  onClick={() => {
+                    setRole(r);
+                    // Remember the role too; each role keeps its own section or name.
+                    if (me) {
+                      const ids = { [me.role]: me.id || undefined, ...me.ids };
+                      writeLocal(ME_KEY, JSON.stringify({ role: r, id: ids[r] ?? "", ids }));
+                    }
+                  }}
+                  className={`rounded px-4 py-2 text-sm font-semibold ${activeRole === r ? "bg-sky/50" : "hover:bg-blush"}`}
+                >
+                  {r === "section" ? "I'm a student" : "I'm a teacher"}
+                </button>
+              ))}
+            </div>
+            <label className="flex flex-col gap-1">
+              <span className="field-label">{activeRole === "section" ? "Your section" : "Your name"}</span>
+              <select
+                value={myId}
+                onChange={(e) => {
+                  const ids = { ...me?.ids, [activeRole]: e.target.value || undefined };
+                  writeLocal(ME_KEY, JSON.stringify({ role: activeRole, id: e.target.value, ids }));
+                  setPicking(false);
+                }}
+                className="field min-w-64"
+              >
+                <option value="">Choose…</option>
+                {options.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {myId && (
+              <button type="button" className="btn-quiet" onClick={() => setPicking(false)}>
+                Done
+              </button>
+            )}
+          </div>
+        )}
 
         {!myId ? (
           <p className="text-lg text-ink-soft">
