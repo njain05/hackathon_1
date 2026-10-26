@@ -30,3 +30,8 @@ services:
       # every restart, so the database must live elsewhere). Used from P2 on.
       - key: DATABASE_URL
         sync: false
+      # Claude API key for "Ask the timetable" (console.anthropic.com > API keys).
+      # Optional: without it the helper says it isn't set up and everything else works.
+      # Set a monthly spending limit in the Anthropic console.
+      - key: ANTHROPIC_API_KEY
+        sync: false

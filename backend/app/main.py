@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
+from app.ask import router as ask_router
 from app.bookings import router as bookings_router
 from app.changes import router as changes_router
 from app.members import router as members_router
@@ -24,6 +25,7 @@ load_dotenv()  # before the first request: the database connects lazily, reading
 app = FastAPI(title="College Timetable API")
 app.include_router(colleges_router)
 app.include_router(bookings_router)
+app.include_router(ask_router)
 app.include_router(changes_router)
 app.include_router(members_router)
 app.include_router(departments_router)

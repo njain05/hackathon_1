@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
+import AskBox from "@/components/ask/AskBox";
 import { ChangesFeed, ChangesUnknown, useMyDay } from "@/components/changes/MyChanges";
 import { CollegeCodeForm, OpenCollegePage } from "@/components/share/OpenCollege";
+import { localNow } from "@/lib/ask";
 import { isoDate, nextDateFor } from "@/lib/changes";
 import { setViewedCollege, useViewerTimetable } from "@/lib/cloud";
 import { buildRows, entriesFor, timeRange, type Cell, type ViewKind } from "@/lib/grid";
@@ -332,6 +334,21 @@ export default function MyTimetable() {
               <SubjectKey data={data} entries={mine} view={activeRole} />
             </section>
           </>
+        )}
+
+        {source.kind === "published" && (
+          <AskBox
+            code={source.college.code}
+            examples={
+              activeRole === "teacher"
+                ? ["What's my next class?", "When am I free tomorrow?", "Is any room free right now?"]
+                : ["Where's my next class?", "What do I have tomorrow?", "Is any room free right now?"]
+            }
+            context={() => ({
+              now: localNow(dateIso ?? isoDate(new Date()), clock?.minutes),
+              me: myId ? { role: activeRole, id: myId } : null,
+            })}
+          />
         )}
       </main>
     </>

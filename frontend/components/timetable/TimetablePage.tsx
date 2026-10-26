@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
+import AdminAsk from "@/components/ask/AdminAsk";
 import PublishBar from "@/components/share/PublishBar";
 import { useAccess } from "@/lib/access";
 import { toApi } from "@/lib/api";
@@ -202,6 +203,8 @@ export default function TimetablePage() {
           )}
           <SubjectKey data={data} entries={mine} view={view} />
         </section>
+
+        <AdminAsk data={data} result={result} />
       </main>
 
       {/* Print copy: just the timetable(s), one per page. */}

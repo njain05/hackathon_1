@@ -3,6 +3,33 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: P5 Ask the timetable (Claude helper)**
+  - **`backend/assistant/`** (pure like `solver/`: no FastAPI or database):
+    - `tools.py`: six tools over the real data: `get_schedule(who, day)`, `whats_next(who, now)`, `free_rooms(day, period)`, `teacher_free_slots(teacher, day)`, `hall_free_slots(room, day)`, `explain_problems()`;
+    - they understand codes or parts of names ("HK", "Harpreet", "me" = the person asking on /my), and days as today, tomorrow, Monday, "next Fri" or a date;
+    - they read **the actual day** (published weekday + leave cover, cancellations and extra classes, with a "Changes:" list), open electives included, and halls checked against classes and bookings;
+    - "nothing found", an unknown name or several matches come back as plain sentences, so the helper says so instead of guessing;
+    - `chat.py`: a manual tool loop with **`claude-haiku-5-5`**, `effort: low` (no `thinking`, no temperature/top_p/top_k, `tool_choice` auto), `strict` tool schemas, **at most 4 tool rounds** and `max_tokens` 2048 per call;
+    - the system prompt says: only facts from tool results, say when a tool finds nothing, 1–3 short sentences, timetable questions only;
+    - all of a turn's tool results go back in one message; a bad tool call goes back as `is_error`; a `refusal` gets a polite answer.
+  - **`POST /colleges/{ref}/ask`** (`backend/app/ask.py`):
+    - takes the question, the last 4 turns, who is asking, their local time, and (from /timetable) the last generate's problems and penalties;
+    - **rate limit**: 8 a minute and 60 an hour per IP (the address Render appends), 600 an hour overall to cap spending; else a 429 "You're asking very quickly";
+    - errors are friendly 503s: no key → "isn't set up on this server yet. Everything else works as usual."; key refused, busy, or unreachable each get their own message;
+    - **the key is never logged or returned**, and a test checks both the response and the log;
+    - `anthropic==1.17.0` (the latest 1.x, which the API docs cover).
+  - **Frontend** (`components/ask/AskBox.tsx`): "Ask the timetable" with 3 example questions as buttons, the question box, the conversation and Clear. Errors show the server's message.
+    - On /my: below the week, using who you chose and the ?now= demo clock. Examples: "Where's my next class?", "What do I have tomorrow?", "Is any room free right now?"; for teachers, "When am I free tomorrow?".
+    - On /timetable (admin, college online): "When is <teacher> free on <day>?", "Which rooms are free in period 3 tomorrow?", "What makes up the quality score?".
+  - `render.yaml`: `ANTHROPIC_API_KEY` (sync: false, optional). `.env.example` says how.
+  - **Tests**: 11 new, with a fake Claude client (76 total, all pass, 3 runs in a row). They cover:
+    - a tool call returns the real Monday timetable, and the request shape is right (model, effort, no sampling parameters, strict tools);
+    - a missing key gives the friendly 503, a refused key gives the friendly 503 with the key in neither the response nor the logs, and an unreachable API is friendly;
+    - the per-IP rate limit, the loop cap, refusals, and bad tool calls as `is_error`;
+    - an unpublished college says so;
+    - the tools on real data: unknown names, days off, "me", free rooms, teacher free periods, what's next, halls, and a day with a cancellation and a hall booking;
+    - explain_problems.
+  - **Not tested against real Claude yet**: no API key is configured locally (`backend/.env` has only the commented example). In the browser the box shows, and an example question gives the friendly "isn't set up" message.
 - **2026-10-26: Usability fixes from the P1 audit (my pages)**
   - **Book a hall**:
     - Send is always pressable and lists what's missing ("Choose a hall.", "Tap the free periods you need.", "Add a phone number or email."…), each a link to that field, and focus jumps to the first one;
@@ -345,7 +372,7 @@ Update after every completed step. Newest entries at the top of each section.
 ## Next
 1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
 2. Push P4 and the leave approval when the user says so. **The user asked for no deploys during their 3:30 meeting**, and a push redeploys Render and Vercel. P3 is already live.
-3. P5: Ask the timetable (Claude helper), or the roles work the user is discussing with the P1 session (separate worktree).
+3. Add `ANTHROPIC_API_KEY` to `backend/.env` (local) and to Render's Environment, set a spending limit in the Anthropic console, and try a few questions live.
 
 ## Problems & fixes
 - The project folder was moved, so `backend/.venv/bin/uvicorn` and `pip` point at the old path ("bad interpreter"). `.claude/launch.json` now runs `backend/.venv/bin/python -m uvicorn`; use `.venv/bin/python -m pip` too, or recreate the venv.
