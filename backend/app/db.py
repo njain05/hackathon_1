@@ -5,18 +5,32 @@ Postgres in production (Render's disk is wiped on every restart). This lives in
 app/, not solver/: the solver stays pure.
 """
 
+import logging
 import os
+import re
 import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 DEFAULT_URL = f"sqlite:///{Path(__file__).resolve().parent.parent / 'timetable.db'}"
+
+log = logging.getLogger("app.db")
+
+
+class DatabaseUnavailable(Exception):
+    """The database can't be reached or DATABASE_URL is wrong. Shown to users as a 503."""
+
+
+def redact(message: str) -> str:
+    """Hide the password of any database URL in a message, before it is logged or shown."""
+    # Greedy to the last "@" in the URL, so a password that itself contains "@" is hidden too.
+    return re.sub(r"(://[^:/@\s]+:)\S*@", r"\1***@", message)
 
 
 def now() -> datetime:
@@ -89,6 +103,7 @@ def configure(url: str | None = None) -> None:
         connect_args["check_same_thread"] = False  # FastAPI uses worker threads
     elif url.startswith("postgresql+psycopg"):
         connect_args["prepare_threshold"] = None  # Supabase's pooler can't keep prepared statements
+        connect_args["connect_timeout"] = 10  # fail with a clear error instead of hanging
     engine = create_engine(url, pool_pre_ping=True, connect_args=connect_args)
     Base.metadata.create_all(engine)
     if _engine is not None:
@@ -96,12 +111,40 @@ def configure(url: str | None = None) -> None:
     _engine, _sessions = engine, sessionmaker(engine, expire_on_commit=False)
 
 
-def get_session() -> Iterator[Session]:
-    """FastAPI dependency: one session per request. Connects on first use."""
+def reset() -> None:
+    """Forget the connection, so the next request connects again (used by tests)."""
+    global _engine, _sessions
+    if _engine is not None:
+        _engine.dispose()
+    _engine, _sessions = None, None
+
+
+def _connect() -> sessionmaker[Session]:
     if _sessions is None:
         with _lock:
             if _sessions is None:
-                configure()
+                try:
+                    configure()
+                except Exception as e:  # a bad URL fails in many ways; all mean the same to users
+                    raise DatabaseUnavailable(redact(f"{type(e).__name__}: {e}")) from None
     assert _sessions is not None
-    with _sessions() as session:
+    return _sessions
+
+
+def get_session() -> Iterator[Session]:
+    """FastAPI dependency: one session per request. Connects on first use and retries until it works."""
+    with _connect()() as session:
         yield session
+
+
+def status() -> dict[str, str]:
+    """For GET /health/db: can the server reach its database? Never includes the password."""
+    try:
+        _connect()
+        assert _engine is not None
+        with _engine.connect() as conn:
+            conn.execute(text("select 1"))
+        return {"database": "ok", "kind": _engine.url.get_backend_name()}
+    except Exception as e:
+        reason = str(e) if isinstance(e, DatabaseUnavailable) else f"{type(e).__name__}: {e}"
+        return {"database": "error", "error": redact(reason).strip().splitlines()[0][:500]}

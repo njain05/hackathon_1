@@ -126,3 +126,43 @@ def test_database_url_normalised() -> None:
     assert db.normalise_url(url).startswith("postgresql+psycopg://postgres.abc:pw@")
     assert db.normalise_url("postgres://u:p@h/d") == "postgresql+psycopg://u:p@h/d"
     assert db.normalise_url("sqlite:///./timetable.db") == "sqlite:///./timetable.db"
+
+
+def test_redact_hides_passwords() -> None:
+    msg = 'Could not connect: postgresql+psycopg://postgres.abc:p@ss#w0rd@aws-0.pooler.supabase.com:5432/postgres failed'
+    out = db.redact(msg)
+    assert "p@ss" not in out and "w0rd" not in out
+    assert "postgres.abc:***@aws-0.pooler.supabase.com" in out
+    assert db.redact("sqlite:///./timetable.db") == "sqlite:///./timetable.db"
+
+
+def test_unreachable_database_gives_a_clear_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Port 1 on this machine refuses at once: like a wrong Supabase host or a typo in DATABASE_URL.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:TopSecret9@127.0.0.1:1/postgres")
+    db.reset()
+    try:
+        for res in (client.get("/colleges/K7M2QP/timetable"), client.post("/colleges", json={"name": "X"})):
+            assert res.status_code == 503
+            assert "DATABASE_URL" in res.json()["detail"]
+            assert "TopSecret9" not in res.text
+        health = client.get("/health/db").json()
+        assert health["database"] == "error"
+        assert "TopSecret9" not in health["error"]
+        assert client.get("/health").json() == {"status": "ok"}  # the rest of the app still works
+
+        # Once DATABASE_URL is fixed, the next request connects without a restart.
+        monkeypatch.setenv("DATABASE_URL", "sqlite://")
+        db.reset()
+        assert client.get("/health/db").json() == {"database": "ok", "kind": "sqlite"}
+    finally:
+        db.reset()
+
+
+def test_unparseable_database_url_gives_a_clear_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "not a url")
+    db.reset()
+    try:
+        assert client.get("/colleges/K7M2QP").status_code == 503
+        assert client.get("/health/db").json()["database"] == "error"
+    finally:
+        db.reset()

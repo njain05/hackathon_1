@@ -14,14 +14,15 @@ import secrets
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from solver import CollegeData, SolveResult, check_timetable
 
-from .db import College, CollegeDraft, PublishedTimetable, as_utc, get_session, now
+from .db import College, CollegeDraft, PublishedTimetable, as_utc, get_session, log, now, redact
 
 router = APIRouter(prefix="/colleges", tags=["colleges"])
 
@@ -31,6 +32,16 @@ MAX_DRAFT_CHARS = 5_000_000
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L: easy to read out and type
 CODE_LENGTH = 6
 BAD_KEY = "This admin link isn't valid for this college. Open the admin link you saved when you created it."
+NO_DATABASE = (
+    "The timetable server can't reach its database right now, so colleges can't be saved or opened. "
+    "Whoever runs the server should check DATABASE_URL (see the README, Deploy) and open /health/db."
+)
+
+
+def database_error(_request: Request, exc: Exception) -> JSONResponse:
+    """Any database failure becomes a plain-English 503. The log gets the cause, never the password."""
+    log.error("Database error: %s", redact(f"{type(exc).__name__}: {exc}"))
+    return JSONResponse(status_code=503, content={"detail": NO_DATABASE})
 
 
 # ---------- Models ----------

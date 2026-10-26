@@ -3,6 +3,12 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: A database problem now explains itself** (after P2 went live)
+  - On Render, `/colleges/…` returned a bare 500 (`/health` was fine). The cause was the `DATABASE_URL` value. The code worked with SQLite.
+  - Now any database failure (an unparseable URL, a wrong host or password, an unreachable server) returns a **503** with "The timetable server can't reach its database… check DATABASE_URL… open /health/db". The CORS headers are kept, so the site shows that message instead of "can't reach the server".
+  - **`GET /health/db`** returns `{"database": "ok", "kind": "postgresql"}`, or the reason, e.g. `OperationalError: … Network is unreachable`. The password is always redacted (`redact()`, including passwords that contain `@`).
+  - The server log gets the redacted cause. Postgres connects time out after 10 s. A failed connect is retried on the next request, so fixing `DATABASE_URL` needs no code change.
+  - 3 new tests (37 in total, all passing): redaction, an unreachable database (503, no password anywhere, recovers when fixed), an unparseable URL.
 - **2026-10-26: P2 Save and share** (one college, many users, no login)
   - **Database** (`backend/app/db.py`, SQLAlchemy 2.1 + psycopg 3; nothing in `solver/`):
     - `DATABASE_URL`: unset means the SQLite file `backend/timetable.db` (git-ignored). In production, Supabase's "Session pooler" URI. `postgres://` and `postgresql://` are rewritten to the psycopg driver.

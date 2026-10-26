@@ -8,7 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel
 
-from app.colleges import router as colleges_router
+from sqlalchemy.exc import SQLAlchemyError
+
+from app import db
+from app.colleges import database_error, router as colleges_router
 from solver import CollegeData, SolveResult, precheck, sample_college, solve
 from solver.models import Problem
 
@@ -16,6 +19,8 @@ load_dotenv()  # before the first request: the database connects lazily, reading
 
 app = FastAPI(title="College Timetable API")
 app.include_router(colleges_router)
+app.add_exception_handler(SQLAlchemyError, database_error)
+app.add_exception_handler(db.DatabaseUnavailable, database_error)
 
 # Comma-separated list of allowed frontend origins, e.g.
 # "http://localhost:3000,https://your-app.vercel.app"
@@ -37,6 +42,12 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/db")
+def health_db() -> dict[str, str]:
+    """Can the server reach its database? Shows the reason if not (never the password)."""
+    return db.status()
 
 
 @app.get("/sample", response_model=CollegeData)
