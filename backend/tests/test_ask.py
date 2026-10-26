@@ -97,7 +97,7 @@ def test_a_tool_call_returns_real_timetable_data(college: dict[str, Any], sample
     # The tool result is the real Monday timetable: every class, with its room and time.
     for e in monday:
         assert subjects[e.subject_id] in seen["tool_result"]
-    assert "09:00" in seen["tool_result"]
+    assert f"P{monday[0].period}" in seen["tool_result"]  # with its period (the solver may not start at period 1)
 
     # The request is shaped as the current API expects.
     first = fake.calls[0]
