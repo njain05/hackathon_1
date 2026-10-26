@@ -22,6 +22,9 @@ Update after every completed step. Newest entries at the top of each section.
   - README rewritten with screenshots (`docs/screenshots/`, refresh with `UPDATE_SCREENSHOTS=1 npm run e2e`), architecture, 5 admin steps, limitations.
   - Secrets scan of the code and git history: clean. The only matches are made-up test passwords in `backend/tests/test_colleges.py` and `backend/demo_checks.py`.
   - Still to do for P10: make the repo public (the user said "Not yet"), deploy, test the live link on a phone, commit "submission".
+- **2026-10-27: Setup, Timetables and Reports only for the Dean** (user chose P2's rule; `lib/access.ts`, agreed with P1)
+  - `staff` = the Dean's (admin) link, OR a setup draft on a device holding no HOD, in-charge or teacher link (the first-time creator). The Dean's link always wins.
+  - Checked in the browser: an HOD + in-charge device with a draft but no Dean link sees Approvals, HOD, Department, My timetable, Book a hall and Events, with no Setup, Timetables or Reports. With the Dean link it sees every page. Full e2e: 16/16 pass.
 - **2026-10-27: Role wording on my pages** (UX session, following the user's role model: Dean → HODs → in-charges, teachers, students, clubs)
   - Visible "admin" is now "Dean" on Home and /today. Home shows an **HOD** or **Department in-charge** card only on a device holding that private link, so nobody sees roles they don't have.
   - The top bar already showed only the pages for the links a device holds. The Department page never sets the setup draft, so HODs and in-charges don't see Setup, Timetables or Reports.
