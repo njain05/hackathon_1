@@ -2,15 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAccess } from "@/lib/access";
 import { useApproverAccess } from "@/lib/bookings";
 import { useAdminAccess } from "@/lib/cloud";
 
-const LINKS = [
-  { href: "/setup", label: "Setup" },
-  { href: "/timetable", label: "Timetables" },
+// Everyone: students, teachers and organisers.
+const PUBLIC_LINKS = [
   { href: "/my", label: "My timetable" },
   { href: "/book", label: "Book a hall" },
   { href: "/events", label: "Events" },
+];
+// Only for whoever makes the timetable on this device.
+const STAFF_LINKS = [
+  { href: "/setup", label: "Setup" },
+  { href: "/timetable", label: "Timetables" },
 ];
 
 export default function AppNav({ collegeName }: { collegeName?: string }) {
@@ -18,8 +23,10 @@ export default function AppNav({ collegeName }: { collegeName?: string }) {
   // Changes (admin) and Approvals only for people holding an admin or approver link on this device.
   const admin = useAdminAccess();
   const approver = useApproverAccess();
+  const access = useAccess();
   const links = [
-    ...LINKS,
+    ...(access?.staff ? STAFF_LINKS : []),
+    ...PUBLIC_LINKS,
     ...(admin ? [{ href: "/changes", label: "Changes" }] : []),
     ...(admin || approver ? [{ href: "/approvals", label: "Approvals" }] : []),
   ];

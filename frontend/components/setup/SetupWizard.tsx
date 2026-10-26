@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AdminLinkNotice, CloudSave, useOpenAdminLink } from "@/components/share/CloudSave";
 import { ApiError, getSample } from "@/lib/api";
 import { downloadWorkbook, importWorkbook, readSpreadsheet } from "@/lib/excel";
+import { useAccess } from "@/lib/access";
 import { ensureAwake } from "@/lib/server";
 import { useCollege } from "@/lib/store";
 import { START_TEMPLATES } from "@/lib/templates";
@@ -58,6 +60,26 @@ const STEPS: StepInfo[] = [
     count: () => "",
   },
 ];
+
+function ViewerNotice({ code, onNewCollege }: { code: string; onNewCollege: () => void }) {
+  return (
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-5 px-4 py-16">
+      <h1 className="text-3xl font-bold">This page is for the timetable in-charge</h1>
+      <p className="text-lg text-ink-soft">
+        Setup is where a college enters its rooms, teachers and subjects. To see your classes for college{" "}
+        <span className="font-semibold text-ink">{code}</span>, open your timetable.
+      </p>
+      <div className="flex flex-wrap gap-3">
+        <Link href="/my" className="btn-primary !px-5 !py-3 !text-base">
+          Open my timetable
+        </Link>
+        <button type="button" className="btn-quiet !px-5 !py-3 !text-base" onClick={onNewCollege}>
+          I’m setting up a new college
+        </button>
+      </div>
+    </main>
+  );
+}
 
 function TemplatePicker({ onPick }: { onPick: (d: CollegeData) => void }) {
   const [loading, setLoading] = useState(false);
@@ -149,9 +171,14 @@ export default function SetupWizard() {
   // Opened from the admin link (/setup#college=…&key=…): load the college saved online.
   const opening = useOpenAdminLink(loaded, data !== null, replaceData);
   const [noticeClosed, setNoticeClosed] = useState(false);
+  const access = useAccess();
+  const [newCollege, setNewCollege] = useState(false);
   const notice = noticeClosed ? null : <AdminLinkNotice state={opening} onClose={() => setNoticeClosed(true)} />;
 
-  if (!loaded || opening.kind === "loading") return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (!loaded || opening.kind === "loading" || access === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  // A student or teacher who opened a share link and tapped "Setup" by mistake.
+  if (!data && !access.staff && access.viewing && !newCollege)
+    return <ViewerNotice code={access.viewing} onNewCollege={() => setNewCollege(true)} />;
   if (!data)
     return (
       <>
