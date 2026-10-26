@@ -44,6 +44,10 @@ Everything about a college comes from the admin's data. Nothing is hard-coded: n
   - `status`: `pending` (waiting at approval step `step`) → `approved` / `rejected`, or `cancelled` by the organiser;
   - `approval_steps`: the admin's ordered chain (e.g. HOD, Dean), each with its own secret link. With none set, the admin approves;
   - `booking_actions`: each signature (who, step, note, time).
+- **Daily changes** (`backend/app/changes.py`, not in the solver):
+  - `leaves`: teacher, date, period range, reason, reported by the teacher or added by the admin;
+  - `day_changes`: date, `kind` (`substitute` / `cancel` / `extra`), section, subject, period range, the usual teacher, the substitute, room, note, and the leave it belongs to;
+  - a date's actual timetable = the published weekday + its changes.
 
 ## Works for any college
 - **First use: pick a starting template.**
@@ -121,6 +125,9 @@ The model is built so each of these is an **additive, optional field**: existing
 | **The backend owns the booking clash rule**: a request needs free periods (no class, no approved or pending booking), and every approval checks again | Two approved bookings can never overlap, even if two people press Approve at the same time. |
 | **Each approval step has its own secret link**, and it only works while the request waits at that step | It really is digital sign-off in order: the Dean can't sign before the HOD, and nobody needs an account. The admin link may act for any step. |
 | Organisers get a **tracking link** (`/track/<token>`), with no login | Like a parcel: "Waiting for Dean since 2 hours". Their phone or email is shown only to approvers, never on the public events calendar. |
+| **Daily changes sit on top of the published timetable**; it is never regenerated for leave | Students' week stays stable, and one absence doesn't reshuffle everyone. The changes feed says exactly what is different today. |
+| **Each change is validated by re-running the independent checker** on the day it produces, ignoring only what a changed day must differ in (weekly hours, the assigned teacher) | One source of truth for clash rules, so a substitute can never be double-booked and an extra class never takes a busy room. |
+| **Anyone may report leave, only the admin changes the day** | No teacher login is needed. A false report only creates a to-do for the admin, and students see changes only after the admin assigns cover or cancels. |
 | Claude chatbot uses **tool use**, called **from the backend only** | Answers come from real data and real functions, never guesses. The API key is never exposed to the browser. |
 | Chatbot model: **Haiku** (latest) | Fast and cheap enough for a live demo with many judges. Set a spending limit in the Anthropic console. |
 

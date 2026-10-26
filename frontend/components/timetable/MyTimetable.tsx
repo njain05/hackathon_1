@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
+import { ChangesFeed, MarkLeave, useMyDay } from "@/components/changes/MyChanges";
 import { CollegeCodeForm, OpenCollegePage } from "@/components/share/OpenCollege";
+import { isoDate, nextDateFor } from "@/lib/changes";
 import { setViewedCollege, useViewerTimetable } from "@/lib/cloud";
 import { buildRows, entriesFor, timeRange, type Cell, type ViewKind } from "@/lib/grid";
 import { useLocal, writeLocal } from "@/lib/local";
@@ -156,6 +158,10 @@ export default function MyTimetable() {
   const [changing, setChanging] = useState(false);
   const rawMe = useLocal(ME_KEY);
   const clock = useClock();
+  // Today's real timetable (with leave cover, cancellations, extra classes) from the server.
+  // With ?now=Monday 10:15, "today" is the next Monday.
+  const dateIso = clock ? (clock.demo ? nextDateFor(clock.day) : isoDate(new Date())) : null;
+  const myDay = useMyDay(source.kind === "published" ? source.college.code : null, dateIso);
   const me = useMemo<Me | null>(() => {
     try {
       return rawMe ? (JSON.parse(rawMe) as Me) : null;
@@ -180,6 +186,9 @@ export default function MyTimetable() {
   const myId = me && me.role === activeRole && options.some((o) => o.id === me.id) ? me.id : "";
   const mine = myId ? entriesFor(result.entries, activeRole, myId) : [];
   const myLabel = options.find((o) => o.id === myId)?.label;
+  // The Today card uses the day as it actually is; the week grid stays as published.
+  const actualToday = myDay.day && clock && myDay.day.day === clock.day ? entriesFor(myDay.day.entries, activeRole, myId) : null;
+  const todayEntries = actualToday && clock ? [...mine.filter((e) => e.day !== clock.day), ...actualToday] : mine;
   const periodNow =
     clock &&
     buildRows(data, mine)
@@ -280,16 +289,23 @@ export default function MyTimetable() {
           )}
         </div>
 
+        {myId && activeRole === "teacher" && source.kind === "published" && (
+          <MarkLeave code={source.college.code} data={data} teacherId={myId} />
+        )}
+
         {!myId ? (
           <p className="text-lg text-ink-soft">
             Choose your {activeRole === "section" ? "section" : "name"} to see your week. This browser will remember it.
           </p>
         ) : (
           <>
+            {source.kind === "published" && dateIso && myDay.day && (
+              <ChangesFeed data={data} me={{ role: activeRole, id: myId }} date={dateIso} upcoming={myDay.upcoming} />
+            )}
             {clock && (
               <section className="flex flex-col gap-3 print:hidden" aria-label="Today">
                 <h2 className="text-xl font-bold">Today</h2>
-                <TodayPanel data={data} entries={mine} role={activeRole} clock={clock} />
+                <TodayPanel data={data} entries={todayEntries} role={activeRole} clock={clock} />
               </section>
             )}
             <section className="flex flex-col gap-3">

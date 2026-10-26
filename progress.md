@@ -3,6 +3,55 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: P4 Teacher leave, substitutes and changes feed** (daily changes on top of the published timetable; it is never regenerated)
+  - **How a day works** (`backend/app/changes.py`):
+    - a date's actual timetable = the published week's entries for that weekday, then that date's changes in order;
+    - every change is validated by building the day it would produce and running the **independent clash checker** on it;
+    - ignored on a single changed day: weekly `hours` totals, and `wrong_teacher` (a substitute isn't the assigned teacher);
+    - also checked: leave, and the teacher's daily maximum;
+    - a day with no classes (e.g. Saturday) is allowed for makeup classes.
+  - **New tables only**: `leaves` and `day_changes` (kind `substitute` / `cancel` / `extra`, a period range, a link to the leave). The live database needs no migration.
+  - **API**:
+    - public: `GET /colleges/{ref}/day?date` (actual entries, changes and the day's check) and `GET …/changes?from&to` (max 31 days);
+    - `POST …/leaves`: anyone may report leave (a teacher from their phone, `by: "teacher"`), but nothing changes for students until the admin acts. The admin key marks it `by: "admin"`;
+    - admin: `GET …/cover?date` (leaves, affected classes with lab periods merged, state, ranked substitutes), `POST/DELETE …/changes`, `DELETE …/leaves/{id}` (also removes its cover), `GET …/extra-slots?date&section_id&teacher_id`;
+    - **substitute ranking**: only teachers who are free then, not unavailable, under their daily max and not on leave. Order: teaches this subject, then the subject's department, then anyone, with fewest classes that day first;
+    - a new substitute or cancel for a class replaces the old one (changing your mind doesn't stack).
+  - **Admin page /changes** (nav "Changes", admin only):
+    - pick a day (← date →) and see "Verified: 0 clashes on this day, with N changes" and how many classes need cover;
+    - **Mark leave**: teacher, whole day or periods, reason;
+    - each leave lists its classes as Needs cover, with the top 4 substitutes ("Teaches this subject" / "Same department" / "Free then", plus classes that day), Assign, show all, or Cancel this class; then Covered by X / Cancelled with Undo;
+    - **Extra or makeup class**: section → subject → teacher (usual one marked). Each period shows why it isn't possible, or a room picker (suitable free rooms, smallest first) and "Book this period";
+    - "All changes on <day>" in plain words, each with Undo;
+    - the forms keep their choices when you switch days.
+  - **/my**:
+    - "Changes today" in the reader's own words: "Data Structures lab (periods 5–6) is cancelled.", "You're taking DAA for CSE-5A in Room C-103 (period 3), for Dr. Harpreet Kaur.", "Your DAA class… is covered by Dr. Anjali Verma.", "Extra class: …";
+    - "Coming up this week (N changes)" sits underneath;
+    - **the Today card uses the actual day**: cancelled classes vanish, substitutes see the covered class as Next, and extra classes appear. With `?now=Monday 10:15`, "today" is the next Monday;
+    - teachers get **Mark leave** (date, whole day or periods, reason): "Leave noted… The timetable in-charge will arrange cover." The week grid stays as published.
+  - **Tests**: 7 new (51 total, all pass). They cover:
+    - leave lists exactly the teacher's classes, with ranked, free substitutes;
+    - leave alone changes nothing;
+    - a substitute changes the day, and a second replaces the first;
+    - cancel and undo;
+    - a busy substitute is refused by the clash check, and the same teacher is refused;
+    - unavailable, at daily max or also on leave: never suggested and refused;
+    - extra-class slots match the free periods, booking and clash refusal, a non-assigned subject refused, a Saturday makeup;
+    - only the admin changes the day, and removing a leave removes its cover;
+    - leave rules (unknown teacher, past date, bad or overlapping periods) and the 31-day changes range.
+  - **Tested in the browser** (sample, Monday 26 Oct):
+    - HK on leave all day: 2 classes needed cover;
+    - assigned Dr. Anjali Verma (same department, 0 classes that day) and cancelled the DS lab: "Verified: 0 clashes, with 2 changes";
+    - HK is on leave Monday and CSE-3A is full on Tuesday, so I booked a Saturday makeup (all periods free, C-103);
+    - /my as CSE-3A at 13:30: the cancelled lab shows under Changes today, Today says "Done for today", and the makeup is under Coming up;
+    - as AV at 10:45: "You're taking DAA…", and Today's Next is DAA in 5 min;
+    - as HK: both changes, and Today "No classes today";
+    - Mark leave from /my: a duplicate for today is refused, Tuesday is noted and changes nothing public;
+    - /changes at 375px with no sideways scroll; lint and production build pass.
+  - Fixed while testing:
+    - `new Date()` during prerender (Next 16 `cacheComponents`): "today" is now read only once the admin link has loaded in the browser;
+    - the extra-class list stuck on "Finding…" after a booking;
+    - the forms reset when switching days.
 - **2026-10-26: P3 Hall booking with digital approval** (this replaces the paper letter)
   - **Backend** (`backend/app/bookings.py`; 3 new tables in `db.py`: `approval_steps`, `bookings`, `booking_actions`. Only new tables, so the live database needs no migration):
     - `GET /colleges/{ref}/availability?room_id&date`: each period is free, or taken by a "class" (published timetable), a "booked" (approved) booking or a "requested" (pending) one;
@@ -216,8 +265,8 @@ Update after every completed step. Newest entries at the top of each section.
 
 ## Next
 1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
-2. Push P3 once the live P2 check with the P1 session is done (a push redeploys Render and Vercel).
-3. P4: teacher leave, substitutes and changes feed (see prompts.md).
+2. Push P4 when the user says so. **The user asked for no deploys during their 3:30 meeting**, and a push redeploys Render and Vercel. P3 is already live.
+3. P5: Ask the timetable (Claude helper), or the roles work the user is discussing with the P1 session (separate worktree).
 
 ## Problems & fixes
 - The project folder was moved, so `backend/.venv/bin/uvicorn` and `pip` point at the old path ("bad interpreter"). `.claude/launch.json` now runs `backend/.venv/bin/python -m uvicorn`; use `.venv/bin/python -m pip` too, or recreate the venv.
