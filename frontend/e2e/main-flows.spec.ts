@@ -51,8 +51,13 @@ test("admin publishes and a student opens it with the share link", async ({ brow
   await expect(student.getByText(new RegExp(`college code\\s*${code}`, "i"))).toBeVisible();
   await student.getByLabel("Your section").selectOption("CSE-3A");
   await expect(student.getByRole("heading", { name: /My timetable: CSE-3A/ })).toBeVisible();
-  // Students don't get the admin's pages in their menu.
-  await expect(student.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Setup" })).toHaveCount(0);
+  // Students don't get the admin's pages in their menu. On a phone the links may sit behind a
+  // "Menu" button: open it first, so the check isn't passing just because the links are hidden.
+  const menu = student.getByRole("button", { name: "Menu" });
+  if (await menu.isVisible()) await menu.click();
+  await expect(student.getByRole("link", { name: "My timetable" }).first()).toBeVisible();
+  await expect(student.getByRole("link", { name: "Setup", exact: true })).toHaveCount(0);
+  await expect(student.getByRole("link", { name: "Timetables", exact: true })).toHaveCount(0);
   await student.context().close();
 });
 
