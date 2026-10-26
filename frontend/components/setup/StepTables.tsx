@@ -2,6 +2,7 @@
 
 import {
   assignmentsTable,
+  electivesTable,
   roomsTable,
   sectionsTable,
   subjectsTable,
@@ -124,6 +125,15 @@ export function StepSubjects({ data, onChange }: Props) {
           One row for each subject a section studies, with its teacher. This is usually the department’s load sheet.
         </p>
         <DataTable spec={assignmentsTable} data={data} onChange={onChange} emptyText="Nothing assigned yet. Paste your load sheet (Section, Subject, Teacher) or add rows." />
+      </div>
+      <div className="flex flex-col gap-2">
+        <h2 className="text-lg font-bold">Open electives (optional)</h2>
+        <p className="hint max-w-3xl">
+          When students of several sections each choose one subject from a group, all choices run at the same time, each with its own
+          teacher and room. One row per choice. Rooms come from the subject’s department, shared rooms, or rooms another department’s
+          HOD has shared (Rooms → Advanced options → “Also used by”).
+        </p>
+        <DataTable spec={electivesTable} data={data} onChange={onChange} emptyText="No open electives. Add a row for each choice, e.g. OE-1, CSE-5A ECE-5A, 3 periods, AI for Everyone, Prof. Rajesh Kumar, 50 students." />
       </div>
     </div>
   );

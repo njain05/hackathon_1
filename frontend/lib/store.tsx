@@ -19,7 +19,11 @@ export function renameRefs(d: CollegeData, kind: RefKind, from: string, to: stri
         sections: d.sections.map((x) => ({ ...x, department_id: sw(x.department_id) })),
         subjects: d.subjects.map((x) => ({ ...x, department_id: sw(x.department_id) })),
         teachers: d.teachers.map((x) => ({ ...x, department_id: sw(x.department_id) })),
-        rooms: d.rooms.map((x) => ({ ...x, department_id: swn(x.department_id) })),
+        rooms: d.rooms.map((x) => ({
+          ...x,
+          department_id: swn(x.department_id),
+          shared_with: x.shared_with?.map(sw),
+        })),
       };
     case "teacher":
       return {
@@ -29,11 +33,26 @@ export function renameRefs(d: CollegeData, kind: RefKind, from: string, to: stri
           teacher_id: sw(a.teacher_id),
           lab_teacher_id: swn(a.lab_teacher_id),
         })),
+        elective_groups: d.elective_groups?.map((g) => ({
+          ...g,
+          options: g.options.map((o) => ({ ...o, teacher_id: sw(o.teacher_id) })),
+        })),
       };
     case "section":
-      return { ...d, assignments: d.assignments.map((a) => ({ ...a, section_id: sw(a.section_id) })) };
+      return {
+        ...d,
+        assignments: d.assignments.map((a) => ({ ...a, section_id: sw(a.section_id) })),
+        elective_groups: d.elective_groups?.map((g) => ({ ...g, section_ids: g.section_ids.map(sw) })),
+      };
     case "subject":
-      return { ...d, assignments: d.assignments.map((a) => ({ ...a, subject_id: sw(a.subject_id) })) };
+      return {
+        ...d,
+        assignments: d.assignments.map((a) => ({ ...a, subject_id: sw(a.subject_id) })),
+        elective_groups: d.elective_groups?.map((g) => ({
+          ...g,
+          options: g.options.map((o) => ({ ...o, subject_id: sw(o.subject_id) })),
+        })),
+      };
     case "room_type":
       return {
         ...d,

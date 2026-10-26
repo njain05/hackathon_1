@@ -95,9 +95,27 @@ export function localChecks(d: CollegeData): Finding[] {
   const taughtSections = new Set(d.assignments.map((a) => a.section_id));
   for (const s of d.sections)
     if (!taughtSections.has(s.id)) warn("subjects", `Section ${s.id} has no subjects assigned yet.`);
-  const busy = new Set(d.assignments.flatMap((a) => [a.teacher_id, a.lab_teacher_id ?? a.teacher_id]));
+  const busy = new Set([
+    ...d.assignments.flatMap((a) => [a.teacher_id, a.lab_teacher_id ?? a.teacher_id]),
+    ...(d.elective_groups ?? []).flatMap((g) => g.options.map((o) => o.teacher_id)),
+  ]);
   for (const t of d.teachers)
     if (!busy.has(t.id)) warn("subjects", `${t.name || t.id} isn't teaching any class yet.`);
+
+  // Fair workload: someone far above their department's average.
+  const load = loads(d);
+  const need = new Map(load.teachers.map((t) => [t.id, t.need]));
+  for (const dept of d.departments) {
+    const staff = d.teachers.filter((t) => t.department_id === dept.id && (need.get(t.id) ?? 0) > 0);
+    if (staff.length < 3) continue;
+    const avg = staff.reduce((n, t) => n + (need.get(t.id) ?? 0), 0) / staff.length;
+    for (const t of staff) {
+      const n = need.get(t.id) ?? 0;
+      if (n >= avg * 1.5 && n - avg >= 4)
+        warn("subjects", `${t.name || t.id} teaches ${n} periods a week, while ${dept.id}'s average is ${Math.round(avg)}.`,
+          "Consider giving one of their classes to a colleague, or set “Max periods a week” for them (Teachers → Advanced options).");
+    }
+  }
 
   return f;
 }
@@ -117,6 +135,10 @@ export function loads(d: CollegeData) {
     tNeed.set(lt, (tNeed.get(lt) ?? 0) + sub.lab_hours);
     sNeed.set(a.section_id, (sNeed.get(a.section_id) ?? 0) + sub.lecture_hours + sub.lab_hours);
   }
+  for (const g of d.elective_groups ?? []) {
+    for (const sid of g.section_ids) sNeed.set(sid, (sNeed.get(sid) ?? 0) + g.periods_per_week);
+    for (const o of g.options) tNeed.set(o.teacher_id, (tNeed.get(o.teacher_id) ?? 0) + g.periods_per_week);
+  }
   const teacherCap = (id: string) => {
     const t = d.teachers.find((x) => x.id === id);
     if (!t) return weekSlots;
@@ -126,7 +148,7 @@ export function loads(d: CollegeData) {
       const free = s.periods_per_day - blocked;
       total += t.max_periods_per_day ? Math.min(free, t.max_periods_per_day) : free;
     }
-    return total;
+    return t.max_periods_per_week ? Math.min(total, t.max_periods_per_week) : total;
   };
   return {
     weekSlots,

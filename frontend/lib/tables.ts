@@ -6,6 +6,7 @@ import type {
   Assignment,
   CollegeData,
   Department,
+  ElectiveGroup,
   Room,
   Section,
   Slot,
@@ -41,7 +42,7 @@ export interface Column<T> {
 }
 
 export interface TableSpec<T> {
-  id: "departments" | "rooms" | "teachers" | "sections" | "subjects" | "assignments";
+  id: "departments" | "rooms" | "teachers" | "sections" | "subjects" | "assignments" | "electives";
   sheet: string; // Excel sheet name
   noun: string; // "room", used in messages
   /** The column holding the row's code, and which references it renames. */
@@ -241,6 +242,23 @@ export const roomsTable: TableSpec<Room> = {
       help: "Leave as Shared if any department can use it.",
     }),
     text("name", "Name (optional)", { aliases: ["Name", "Room name"], placeholder: "Lecture Theatre 1" }),
+    {
+      key: "shared_with",
+      header: "Also used by",
+      aliases: ["Shared with", "Shared departments"],
+      kind: "text",
+      advanced: true,
+      placeholder: "ECE, ME",
+      help: "Other departments allowed to use this department's room.",
+      get: (row) => (row.shared_with ?? []).join(", "),
+      set: (row, raw, d) => {
+        const codes = splitCodes(raw);
+        const known = new Map(d.departments.map((x) => [norm(x.id), x.id]));
+        const bad = codes.filter((c) => !known.has(norm(c)));
+        if (bad.length) return `Unknown department ${bad.map((b) => `"${b}"`).join(", ")}. Use codes like ${d.departments.slice(0, 3).map((x) => x.id).join(", ")}.`;
+        return { ...row, shared_with: [...new Set(codes.map((c) => known.get(norm(c))!))].filter((c) => c !== row.department_id) };
+      },
+    },
   ],
   blank: (d) => ({
     id: "",
@@ -270,6 +288,13 @@ export const teachersTable: TableSpec<Teacher> = {
       advanced: true,
       aliases: ["Max per day", "Max periods/day"],
       help: "Leave blank for no limit.",
+    }),
+    num("max_periods_per_week", "Max periods a week", {
+      optional: true,
+      min: 1,
+      advanced: true,
+      aliases: ["Max per week", "Max periods/week", "Weekly load"],
+      help: "Keeps workload fair. Leave blank for no limit.",
     }),
     {
       key: "unavailable",
@@ -413,6 +438,121 @@ export const assignmentsTable: TableSpec<Assignment> = {
   withRows: (d, rows) => ({ ...d, assignments: rows }),
 };
 
+/** Split "CSE-3A, CSE-3B ECE-5A" into codes. */
+function splitCodes(raw: string): string[] {
+  return raw.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+/** One row per elective option; the group fields repeat on every row of the group. */
+export interface ElectiveRow {
+  group_id: string;
+  group_name: string;
+  section_ids: string[];
+  periods_per_week: number;
+  subject_id: string;
+  teacher_id: string;
+  students: number;
+}
+
+function flattenElectives(d: CollegeData): ElectiveRow[] {
+  return (d.elective_groups ?? []).flatMap((g) =>
+    g.options.map((o) => ({
+      group_id: g.id,
+      group_name: g.name,
+      section_ids: g.section_ids,
+      periods_per_week: g.periods_per_week,
+      subject_id: o.subject_id,
+      teacher_id: o.teacher_id,
+      students: o.students,
+    })),
+  );
+}
+
+/**
+ * Rebuild groups from rows. A group field edited on one row applies to the
+ * whole group: for each field, a value that differs from the saved group wins.
+ */
+function groupElectives(d: CollegeData, rows: ElectiveRow[]): ElectiveGroup[] {
+  const before = new Map((d.elective_groups ?? []).map((g) => [g.id, g]));
+  const order: string[] = [];
+  const byGroup = new Map<string, ElectiveRow[]>();
+  for (const r of rows) {
+    const id = r.group_id.trim();
+    if (!byGroup.has(id)) {
+      byGroup.set(id, []);
+      order.push(id);
+    }
+    byGroup.get(id)!.push(r);
+  }
+  const pick = <T,>(values: T[], old: T | undefined, same: (a: T, b: T) => boolean): T =>
+    (old === undefined ? undefined : values.find((v) => !same(v, old))) ?? values[0];
+  const sameList = (a: string[], b: string[]) => a.join(",") === b.join(",");
+  return order.map((id) => {
+    const rs = byGroup.get(id)!;
+    const old = before.get(id);
+    return {
+      id,
+      name: pick(rs.map((r) => r.group_name), old?.name, (a, b) => a === b),
+      section_ids: pick(rs.map((r) => r.section_ids), old?.section_ids, sameList),
+      periods_per_week: pick(rs.map((r) => r.periods_per_week), old?.periods_per_week, (a, b) => a === b),
+      options: rs.map((r) => ({ subject_id: r.subject_id, teacher_id: r.teacher_id, students: r.students })),
+    };
+  });
+}
+
+export const electivesTable: TableSpec<ElectiveRow> = {
+  id: "electives",
+  sheet: "Open electives",
+  noun: "elective option",
+  columns: [
+    text("group_id", "Group code", { required: true, aliases: ["Elective group", "Group", "Elective code"], placeholder: "OE-1", width: "8rem" }),
+    text("group_name", "Group name", { aliases: ["Elective name"], placeholder: "Open Elective 1" }),
+    {
+      key: "section_ids",
+      header: "Sections",
+      aliases: ["Section", "For sections", "Students from"],
+      kind: "text",
+      required: true,
+      placeholder: "CSE-5A, ECE-5A",
+      help: "Whose students choose from this group.",
+      get: (row) => row.section_ids.join(", "),
+      set: (row, raw, d) => {
+        const codes = splitCodes(raw);
+        if (!codes.length) return "Sections is missing.";
+        const known = new Map(d.sections.map((x) => [norm(x.id), x.id]));
+        const bad = codes.filter((c) => !known.has(norm(c)));
+        if (bad.length) return `Unknown section ${bad.map((b) => `"${b}"`).join(", ")}. Add it in Sections first.`;
+        return { ...row, section_ids: [...new Set(codes.map((c) => known.get(norm(c))!))] };
+      },
+    },
+    num("periods_per_week", "Periods a week", { required: true, min: 1, aliases: ["Periods", "Hours"] }),
+    ref(
+      "subject_id",
+      "Subject",
+      (d) => d.subjects.map((s) => ({ value: s.id, label: `${s.id} – ${s.name}` })),
+      { required: true, aliases: ["Subject code", "Option", "Course"] },
+    ),
+    ref("teacher_id", "Teacher", teacherOptions, { required: true, aliases: ["Teacher code", "Faculty"] }),
+    num("students", "Students", { required: true, min: 1, aliases: ["Strength", "Students chose"], help: "How many chose this option." }),
+  ],
+  blank: (d) => {
+    const n = (d.elective_groups ?? []).length + 1;
+    const last = (d.elective_groups ?? []).at(-1);
+    return {
+      group_id: last?.id ?? `OE-${n}`,
+      group_name: last?.name ?? `Open Elective ${n}`,
+      section_ids: last?.section_ids ?? [],
+      periods_per_week: last?.periods_per_week ?? 3,
+      subject_id: "",
+      teacher_id: "",
+      students: 40,
+    };
+  },
+  identity: (r) => `${norm(r.group_id)}|${norm(r.subject_id)}`,
+  rows: flattenElectives,
+  withRows: (d, rows) => ({ ...d, elective_groups: groupElectives(d, rows) }),
+};
+
 /** In dependency order: each table's references must exist before it's imported. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ALL_TABLES: TableSpec<any>[] = [
@@ -422,6 +562,7 @@ export const ALL_TABLES: TableSpec<any>[] = [
   sectionsTable,
   subjectsTable,
   assignmentsTable,
+  electivesTable,
 ];
 
 // ---------- Import ----------

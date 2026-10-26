@@ -57,6 +57,8 @@ export interface Teacher {
   name: string;
   department_id: string;
   max_periods_per_day: number | null;
+  /** Fair-load cap. Optional: setups saved before it existed don't have it. */
+  max_periods_per_week?: number | null;
   unavailable: Slot[];
 }
 
@@ -73,6 +75,24 @@ export interface Room {
   type: string;
   capacity: number;
   department_id: string | null;
+  /** Other departments allowed to use this department's room (approved by its HOD). */
+  shared_with?: string[];
+}
+
+/** One choice inside an open elective, e.g. "AI for Everyone" by Dr. X. */
+export interface ElectiveOption {
+  subject_id: string;
+  teacher_id: string;
+  students: number;
+}
+
+/** Students of these sections split into parallel classes at the same time. */
+export interface ElectiveGroup {
+  id: string;
+  name: string;
+  section_ids: string[];
+  periods_per_week: number;
+  options: ElectiveOption[];
 }
 
 export interface CollegeData {
@@ -85,6 +105,8 @@ export interface CollegeData {
   teachers: Teacher[];
   assignments: Assignment[];
   rooms: Room[];
+  /** Optional: setups saved before open electives existed don't have it. */
+  elective_groups?: ElectiveGroup[];
 }
 
 export type StepId = "week" | "rooms" | "teachers" | "sections" | "subjects" | "review";
@@ -103,7 +125,9 @@ export interface Entry {
   subject_id: string;
   teacher_id: string;
   room_id: string;
-  kind: "lecture" | "lab";
+  kind: "lecture" | "lab" | "elective";
+  /** For electives: the group id (section_id is the group id too). */
+  elective_group?: string | null;
 }
 
 export interface Issue {
