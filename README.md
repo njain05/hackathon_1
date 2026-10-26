@@ -37,7 +37,9 @@ Built for the Punjab Jobs AI Bootcamp hackathon (J-PAL South Asia). It works for
 - **Timetable views** by section, teacher and room, on a printable A4 page, and as a day-by-day list on phones. A student's **Today** card shows what's on now and next.
 - **Hall booking with digital approval.** Only free slots are offered. The request moves through an approval chain (e.g. HOD → Dean), the organiser follows it with a tracking link, and approved events appear on a calendar.
 - **Daily changes.** Teacher leave with HOD approval, substitute suggestions, and cancelled or moved classes shown on students' Today card.
-- *In progress:* "Ask the timetable", a Claude-powered helper that answers questions like "Where is my next class?" from the real timetable.
+- **Lab batches and short days.** Split a section into lab batches (e.g. A1 and A2) that do labs separately, even at the same time in different labs. Give any day fewer periods (e.g. a half-day Saturday).
+- **Reports and exports.** A Reports page shows each teacher's weekly load against their department's average, rooms that are hardly used, and each section's free periods. Download every timetable as one Excel file, or add your own week to Google or Apple Calendar.
+- **Ask the timetable.** A chat box on My timetable and Timetables answers questions like "Where is my next class?" or "Which rooms are free now?". It uses Claude (Haiku) with 6 tools over the real timetable, so it answers only from real data. It's optional: set `ANTHROPIC_API_KEY` on the server; without it, the box says the helper isn't set up.
 
 ## How an admin uses it, in 5 steps
 
@@ -163,11 +165,11 @@ If you forget the variable, the Vercel build stops with "NEXT_PUBLIC_API_URL is 
   - Saving or opening a college fails with a database message: open `<Render URL>/health/db`. It says `{"database":"ok"}` or why it can't connect, with the password hidden. *Can't load plugin: sqlalchemy.dialects:http* means you pasted Supabase's project URL (`https://xxxx.supabase.co`) instead of the connection string: use the **Session pooler** URI, which starts with `postgresql://`. *Network is unreachable* means you used Supabase's direct address: switch to the **Session pooler** URI. *password authentication failed* means the password in `DATABASE_URL` is wrong (if it contains `@ # / : ?`, reset it in Supabase to letters and numbers). After fixing `DATABASE_URL`, click **Save, rebuild, and deploy**.
   - Browser console says *blocked by CORS policy*: `FRONTEND_ORIGINS` doesn't exactly match the site's address (check `https://` and no trailing `/`).
   - Render build fails on the Python version: change `PYTHON_VERSION` in Render → Environment to the newest `3.12.x`.
-- **Secrets** (`DATABASE_URL`, later `ANTHROPIC_API_KEY`) go only in Render's Environment page, never in the code or in a `NEXT_PUBLIC_` variable.
+- **Secrets** (`DATABASE_URL`, `ANTHROPIC_API_KEY`) go only in Render's Environment page, never in the code or in a `NEXT_PUBLIC_` variable. For the helper, also set a monthly spending limit in the Anthropic console.
 
 ## Limitations and roadmap
 
-- **Lab batches** (a section split into groups for labs) and **combined lectures** (two sections in one room) are designed in the data model but not built yet ([context.md](context.md), "College variations").
+- **Combined lectures** (two sections taught together in one room) are designed in the data model but not built yet ([context.md](context.md), "College variations").
 - **Free hosting is slow to wake and slow to solve.** The free Render server sleeps after 15 minutes (the site shows "Waking up the server") and has about a tenth of a CPU, so generating takes about 20 seconds there and may not reach the best possible score. It is still always clash-free. It takes about 5 seconds on a laptop.
 - **Links instead of accounts.** Anyone holding a private link can use it, so share them privately; making a new link revokes the old one.
-- **Next:** the "Ask the timetable" helper (in progress), calendar subscription links, an installable offline app for viewing, reports (teacher workload, room usage) and Excel export, and a one-command local college server (Docker).
+- **Next:** live calendar subscription links (today's "Add to my calendar" is a one-time file), an installable offline app for viewing, pasting a messy load sheet for Claude to tidy, and a one-command local college server (Docker).
