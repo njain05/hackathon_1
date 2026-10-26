@@ -3,6 +3,12 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: Simpler navigation, "Who are you?" Home and an admin Today page** (UX session)
+  - **Top bar (`components/AppNav.tsx`)**: links in order of use for whoever holds this device. Wide screens show 4 links and put the rest under **More ▾**. Below 768px a single **☰ Menu** button replaces the rows of links. Menus close on Escape, an outside click, or after navigating. Every access-gated link keeps its old condition (Teacher, HOD, Department, Changes, People, Approvals; Setup and Timetables staff-only). The college name falls back to the admin link's name.
+  - **Home (`components/home/RolePicker.tsx`)**: four cards: Student → /my, Teacher → /teacher (with a teacher link) or /my, Event organiser → /book, Timetable admin → /today (with the admin link) or /setup.
+  - **`/today` (`components/today/TodayPage.tsx`)**: the admin's to-do list, urgent items first in red, each with one button. It covers not published / setup changed after publishing, leave waiting, classes needing cover, and hall bookings waiting. Reads only `getAdminCollege`, `getCover` and `getApprovals`, refetches when the tab is shown again, and has Refresh and Try again buttons.
+  - Checked: lint, build, e2e main-flows + screens (5/5 including the 375px fit check), and in the browser on desktop and phone.
+  - Still to do (waiting on P1's commits): Reports link in AppNav, ExportButtons on /timetable, CalendarExport on /my. Then fold SetupWizard's toolbar into a More menu, merge TimetablePage's 3 status boxes into one line, and collapse the /my section picker.
 - **2026-10-27: Short days and lab batches in the daily features** (after P1's P7 solver, `fdbe243`)
   - Every daily feature uses the day's own period count (`settings.periods_on(day)`), so a 4-period Saturday never offers period 5:
     - the helper (free rooms, teacher free periods, hall slots, "period now");

@@ -2,64 +2,154 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { useAccess } from "@/lib/access";
 import { useApproverAccess } from "@/lib/bookings";
 import { useAdminAccess } from "@/lib/cloud";
 import { useMemberAccess } from "@/lib/members";
 
-// Everyone: students, teachers and organisers.
-const PUBLIC_LINKS = [
-  { href: "/my", label: "My timetable" },
-  { href: "/book", label: "Book a hall" },
-  { href: "/events", label: "Events" },
-];
-// Only for whoever makes the timetable on this device.
-const STAFF_LINKS = [
-  { href: "/setup", label: "Setup" },
-  { href: "/timetable", label: "Timetables" },
-];
+interface NavLink {
+  href: string;
+  label: string;
+}
+
+/** How many links fit in the bar on a wide screen; the rest go under "More". */
+const SHOWN = 4;
 
 export default function AppNav({ collegeName }: { collegeName?: string }) {
   const path = usePathname();
-  // Teacher, HOD, Changes and People (admin) and Approvals only for people holding that link on this device.
+  // Teacher, HOD, Department, Changes, People and Approvals only for people holding that link on this device.
   const admin = useAdminAccess();
   const approver = useApproverAccess();
   const teacher = useMemberAccess("teacher");
   const hod = useMemberAccess("hod");
   const incharge = useMemberAccess("incharge");
   const access = useAccess();
-  const links = [
-    ...(access?.staff ? STAFF_LINKS : []),
-    ...PUBLIC_LINKS,
+  const staff = Boolean(access?.staff);
+
+  // Most useful first for whoever holds this device. Students see only the last three.
+  const links: NavLink[] = [
+    ...(admin ? [{ href: "/today", label: "Today" }] : []),
+    ...(approver && !admin ? [{ href: "/approvals", label: "Approvals" }] : []),
     ...(teacher ? [{ href: "/teacher", label: "Teacher" }] : []),
     ...(hod ? [{ href: "/hod", label: "HOD" }] : []),
+    ...(staff ? [{ href: "/timetable", label: "Timetables" }] : []),
+    ...(admin ? [{ href: "/changes", label: "Changes" }] : []),
+    ...(admin ? [{ href: "/approvals", label: "Approvals" }] : []),
+    ...(staff ? [{ href: "/setup", label: "Setup" }] : []),
     ...(incharge || hod ? [{ href: "/department", label: "Department" }] : []),
-    ...(admin ? [{ href: "/changes", label: "Changes" }, { href: "/people", label: "People" }] : []),
-    ...(admin || approver ? [{ href: "/approvals", label: "Approvals" }] : []),
+    ...(admin ? [{ href: "/people", label: "People" }] : []),
+    { href: "/my", label: "My timetable" },
+    { href: "/book", label: "Book a hall" },
+    { href: "/events", label: "Events" },
   ];
-  return (
-    <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-line px-4 py-3 sm:px-6 print:hidden">
-      <Link href="/" className="mr-auto truncate font-bold">
-        {collegeName || "College Timetable"}
+  // Never hide just one link behind "More".
+  const shown = links.length <= SHOWN + 1 ? links : links.slice(0, SHOWN);
+  const more = links.slice(shown.length);
+
+  // Each menu remembers the page it was opened on, so it closes by itself after navigating.
+  const [menuAt, setMenuAt] = useState<string | null>(null); // phone menu
+  const [moreAt, setMoreAt] = useState<string | null>(null); // "More" on wide screens
+  const menuOpen = menuAt === path;
+  const moreOpen = moreAt === path;
+  const setMenuOpen = (open: boolean) => setMenuAt(open ? path : null);
+  const setMoreOpen = (open: boolean) => setMoreAt(open ? path : null);
+  const moreRef = useRef<HTMLLIElement>(null);
+
+  // Close menus on Escape and on a click elsewhere.
+  useEffect(() => {
+    if (!moreOpen && !menuOpen) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMoreAt(null);
+        setMenuAt(null);
+      }
+    };
+    const click = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreAt(null);
+    };
+    document.addEventListener("keydown", key);
+    document.addEventListener("mousedown", click);
+    return () => {
+      document.removeEventListener("keydown", key);
+      document.removeEventListener("mousedown", click);
+    };
+  }, [moreOpen, menuOpen]);
+
+  const name = collegeName || admin?.name || "College Timetable";
+  const item = (l: NavLink, block = false) => {
+    const active = path === l.href;
+    return (
+      <Link
+        href={l.href}
+        aria-current={active ? "page" : undefined}
+        className={`${block ? "block" : ""} rounded-md px-3 py-2 text-sm font-semibold ${active ? "bg-sky/40" : "hover:bg-blush"}`}
+      >
+        {l.label}
       </Link>
-      <nav aria-label="Main">
-        <ul className="flex flex-wrap gap-1">
-          {links.map((l) => {
-            const active = path === l.href;
-            return (
-              <li key={l.href}>
-                <Link
-                  href={l.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`rounded-md px-3 py-2 text-sm font-semibold ${active ? "bg-sky/40" : "hover:bg-blush"}`}
+    );
+  };
+  const moreActive = more.some((l) => l.href === path);
+
+  return (
+    <header className="border-b border-line px-4 py-3 sm:px-6 print:hidden">
+      <div className="flex items-center gap-x-6 gap-y-2">
+        <Link href="/" className="mr-auto truncate font-bold">
+          {name}
+        </Link>
+
+        {/* Wide screens: a few links, the rest under More. */}
+        <nav aria-label="Main" className="hidden md:block">
+          <ul className="flex items-center gap-1">
+            {shown.map((l) => (
+              <li key={l.href}>{item(l)}</li>
+            ))}
+            {more.length > 0 && (
+              <li ref={moreRef} className="relative">
+                <button
+                  type="button"
+                  aria-expanded={moreOpen}
+                  aria-controls="nav-more"
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold ${moreActive ? "bg-sky/40" : "hover:bg-blush"}`}
                 >
-                  {l.label}
-                </Link>
+                  More <span aria-hidden>▾</span>
+                </button>
+                {moreOpen && (
+                  <ul
+                    id="nav-more"
+                    className="absolute right-0 z-20 mt-1 flex min-w-44 flex-col gap-0.5 rounded-md border border-line bg-paper p-1 shadow-lg"
+                  >
+                    {more.map((l) => (
+                      <li key={l.href}>{item(l, true)}</li>
+                    ))}
+                  </ul>
+                )}
               </li>
-            );
-          })}
-        </ul>
-      </nav>
+            )}
+          </ul>
+        </nav>
+
+        {/* Phones and narrow windows: one Menu button instead of rows of links. */}
+        <button
+          type="button"
+          aria-expanded={menuOpen}
+          aria-controls="nav-phone"
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="btn-quiet shrink-0 md:hidden"
+        >
+          <span aria-hidden>{menuOpen ? "✕" : "☰"}</span> Menu
+        </button>
+      </div>
+      {menuOpen && (
+        <nav id="nav-phone" aria-label="Main" className="pt-3 md:hidden">
+          <ul className="flex flex-col gap-0.5">
+            {links.map((l) => (
+              <li key={l.href}>{item(l, true)}</li>
+            ))}
+          </ul>
+        </nav>
+      )}
     </header>
   );
 }
