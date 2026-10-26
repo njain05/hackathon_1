@@ -8,7 +8,11 @@ import { periodText, since } from "@/lib/bookings";
 import {
   type AffectedClass,
   type CoverView,
+  type Rules,
   type SlotOption,
+  type StaffAuth,
+  getRules,
+  setRules,
   TIER_TEXT,
   addChange,
   addDays,
@@ -113,11 +117,58 @@ function LeaveForm({ data, admin, date, onDone }: { data: CollegeData; admin: Ad
   );
 }
 
-/** One class a leave affects: assign a ranked substitute, or cancel it. */
-function ClassCover({ cls, data, admin, date, leaveId, teacherId, onDone }: {
+/** The Dean's college rule: cover a lab hour by hour (two teachers for a 2-hour lab) or with one teacher. */
+function LabCoverRule({ admin, onChange }: { admin: AdminAccess; onChange: () => void }) {
+  const [rules, setState] = useState<Rules | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    getRules({ admin })
+      .then(setState)
+      .catch((e: unknown) => setError(errorText(e, "Couldn't load the college rules.")));
+  }, [admin]);
+  const choose = async (lab_cover: Rules["lab_cover"]) => {
+    setError(null);
+    try {
+      setState(await setRules(admin, { ...rules, lab_cover }));
+      onChange();
+    } catch (e) {
+      setError(errorText(e, "Couldn't save the rule."));
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-paper px-3 py-2">
+      <span className="font-semibold">When a lab teacher is away:</span>
+      <div role="group" aria-label="Lab cover" className="flex rounded-md border border-line bg-cream p-1">
+        {(
+          [
+            ["per_period", "A different teacher each hour"],
+            ["whole", "One teacher for the whole lab"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={rules?.lab_cover === value}
+            disabled={!rules}
+            onClick={() => void choose(value)}
+            className={`rounded px-3 py-1.5 text-sm font-semibold ${rules?.lab_cover === value ? "bg-sky/50" : "hover:bg-blush"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <span className="hint">A college rule; HODs follow it too.</span>
+      {error && <span className="font-semibold text-err">{error}</span>}
+    </div>
+  );
+}
+
+/** One class a leave affects (with per-period lab cover, one hour of a lab): assign a ranked substitute, or cancel it.
+ * Used by the Dean (/changes) and by the class's own HOD (/hod). */
+export function ClassCover({ cls, data, auth, date, leaveId, teacherId, onDone }: {
   cls: AffectedClass;
   data: CollegeData;
-  admin: AdminAccess;
+  auth: StaffAuth;
   date: string;
   leaveId: number;
   /** The teacher on leave: their class only, when two lab batches share the slot. */
@@ -144,6 +195,9 @@ function ClassCover({ cls, data, admin, date, leaveId, teacherId, onDone }: {
   const base = {
     date, section_id: cls.section_id, start_period: cls.start_period, end_period: cls.end_period, leave_id: leaveId, teacher_id: teacherId,
   };
+  // One hour of a longer lab (per-period cover): cancelling takes the whole lab.
+  const labHour = cls.class_kind === "lab" && cls.block_end > cls.block_start && cls.start_period === cls.end_period;
+  const whole = { ...base, start_period: cls.block_start, end_period: cls.block_end };
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-line bg-cream p-3">
@@ -153,6 +207,7 @@ function ClassCover({ cls, data, admin, date, leaveId, teacherId, onDone }: {
             {cls.section_id} · {n.subject(cls.subject_id)}
             {cls.class_kind === "lab" ? " lab" : ""}
             {cls.batch ? ` (batch ${cls.batch})` : ""}
+            {labHour ? ` · hour ${cls.start_period - cls.block_start + 1} of ${cls.block_end - cls.block_start + 1}` : ""}
           </span>{" "}
           <span className="text-ink-soft">
             {periodText(data, cls.start_period, cls.end_period)} · {n.room(cls.room_id)}
@@ -167,7 +222,7 @@ function ClassCover({ cls, data, admin, date, leaveId, teacherId, onDone }: {
             <span className="rounded-full bg-mint px-3 py-1 text-sm font-semibold text-ok">
               {cls.state === "substitute" ? `Covered by ${n.teacher(cls.new_teacher_id)}` : "Cancelled"}
             </span>
-            <button type="button" className="btn-quiet !py-1" disabled={busy} onClick={() => act(() => removeChange(admin, cls.change_id!))}>
+            <button type="button" className="btn-quiet !py-1" disabled={busy} onClick={() => act(() => removeChange(auth, cls.change_id!))}>
               Undo
             </button>
           </>
@@ -185,13 +240,14 @@ function ClassCover({ cls, data, admin, date, leaveId, teacherId, onDone }: {
                     <span className="font-semibold">{n.teacher(s.teacher_id)}</span>{" "}
                     <span className="text-sm text-ink-soft">
                       {TIER_TEXT[s.tier]} · {s.load_today} {s.load_today === 1 ? "class" : "classes"} that day
+                      {s.covers_week > 0 && ` · covered ${s.covers_week} this week`}
                     </span>
                   </span>
                   <button
                     type="button"
                     className="btn-quiet !py-1"
                     disabled={busy}
-                    onClick={() => act(() => addChange(admin, { ...base, kind: "substitute", new_teacher_id: s.teacher_id }))}
+                    onClick={() => act(() => addChange(auth, { ...base, kind: "substitute", new_teacher_id: s.teacher_id }))}
                   >
                     Assign
                   </button>
@@ -205,8 +261,16 @@ function ClassCover({ cls, data, admin, date, leaveId, teacherId, onDone }: {
                 {all ? "Show fewer" : `Show all ${cls.suggestions.length} free teachers`}
               </button>
             )}
-            <button type="button" className="btn-quiet !py-1 ml-auto" disabled={busy} onClick={() => window.confirm("Cancel this class? Students and the teacher will see it as cancelled.") && act(() => addChange(admin, { ...base, kind: "cancel" }))}>
-              Cancel this class
+            <button
+              type="button"
+              className="btn-quiet !py-1 ml-auto"
+              disabled={busy}
+              onClick={() =>
+                window.confirm(labHour ? "Cancel the whole lab? Students and the teacher will see it as cancelled." : "Cancel this class? Students and the teacher will see it as cancelled.") &&
+                act(() => addChange(auth, { ...whole, kind: "cancel" }))
+              }
+            >
+              {labHour ? "Cancel the whole lab" : "Cancel this class"}
             </button>
           </div>
         </>
@@ -333,7 +397,7 @@ function ExtraClass({ data, admin, date, onDone }: { data: CollegeData; admin: A
   );
 }
 
-/** Admin: one date's leave, cover and extra classes, on top of the published timetable. */
+/** The Dean: one date's leave, cover and extra classes for every department, on top of the published timetable. */
 export default function DailyChanges() {
   const admin = useAdminAccess();
   const [picked, setDate] = useState<string | null>(null);
@@ -393,7 +457,7 @@ export default function DailyChanges() {
         <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-4 px-4 py-16">
           <h1 className="text-3xl font-bold">Daily changes</h1>
           <p className="text-lg text-ink-soft">
-            Leave, substitutes and extra classes are arranged by the timetable in-charge. Open your admin link first, then
+            Leave, substitutes and extra classes for the whole college are arranged here by the Dean. Open the Dean’s link first, then
             come back here. Teachers can report their own leave on the My timetable page.
           </p>
           <Link href="/my" className="btn-quiet w-fit">
@@ -470,6 +534,7 @@ export default function DailyChanges() {
 
             <section className="flex flex-col gap-3" aria-label="Teachers on leave">
               <h2 className="text-xl font-bold">Teachers on leave</h2>
+              <LabCoverRule admin={admin} onChange={refresh} />
               <LeaveForm data={college} admin={admin} date={date} onDone={refresh} />
               {!v ? null : v.leaves.length === 0 ? (
                 <p className="text-ink-soft">Nobody is on leave this day.</p>
@@ -484,7 +549,7 @@ export default function DailyChanges() {
                           {n.teacher(lv.teacher_id)}{" "}
                           <span className="font-normal text-ink-soft">
                             {whole ? "whole day" : periodText(college, lv.start_period, lv.end_period).replace(/^P/, "p")}
-                            {lv.reason && ` · ${lv.reason}`} · {lv.by === "teacher" ? "reported by the teacher" : "added by admin"}
+                            {lv.reason && ` · ${lv.reason}`} · {lv.by === "teacher" ? "asked by the teacher" : "added by the Dean"}
                           </span>
                         </h3>
                         <button
@@ -507,7 +572,7 @@ export default function DailyChanges() {
                           </span>
                           <button type="button" className="btn-quiet !py-1" disabled={busy}
                             onClick={() => act(() => decideLeave(admin.code, lv.id, "approve", "", { admin }), "Couldn't approve the leave.")}>
-                            Approve as admin
+                            Approve as Dean
                           </button>
                           <button type="button" className="btn-quiet !py-1" disabled={busy}
                             onClick={() => {
@@ -539,7 +604,7 @@ export default function DailyChanges() {
                               key={`${cls.section_id}-${cls.start_period}`}
                               cls={cls}
                               data={college}
-                              admin={admin}
+                              auth={admin}
                               date={date}
                               leaveId={lv.id}
                               teacherId={lv.teacher_id}

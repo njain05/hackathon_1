@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ from solver.models import CheckReport, Entry
 
 from .bookings import today
 from .colleges import AdminCollegeDep, DbSession, find_college, hash_key, latest
-from .db import College, DayChange, Leave, as_utc, now
+from .db import College, CollegeRules, DayChange, Leave, as_utc, now
 from .members import MemberDep, can_manage_department, department_name, head_of, member_access, published_data, require_role
 
 router = APIRouter(tags=["changes"])
@@ -55,7 +55,7 @@ class LeaveOut(BaseModel):
     reason: str
     by: str
     status: Literal["pending", "approved", "rejected"]
-    waiting_for: str | None = Field(description='While pending: "HOD (CSE)", or "the admin" if the department has no HOD link')
+    waiting_for: str | None = Field(description='While pending: "HOD (CSE)", or "the Dean" if the department has no HOD link')
     waiting_since: str | None
     decided_by: str
     decision_note: str
@@ -127,6 +127,15 @@ class Suggestion(BaseModel):
     teacher_id: str
     tier: Literal["subject", "department", "anyone"]
     load_today: int = Field(description="Periods they already teach that day")
+    covers_week: int = Field(0, description="Classes they covered in the 7 days up to this date (fairness)")
+
+
+class Rules(BaseModel):
+    """College rules for daily changes. The Dean sets them."""
+
+    lab_cover: Literal["per_period", "whole"] = Field(
+        "per_period", description="per_period: a different substitute may take each hour of a lab; whole: one for the whole lab"
+    )
 
 
 class AffectedClass(BaseModel):
@@ -137,6 +146,9 @@ class AffectedClass(BaseModel):
     room_id: str
     class_kind: str
     batch: str | None = None
+    # With per-period lab cover, each lab hour is its own row; these give the whole lab (to cancel it at once).
+    block_start: int
+    block_end: int
     state: Literal["awaiting_approval", "needs_cover", "substitute", "cancelled"]
     change_id: int | None = None
     new_teacher_id: str | None = None
@@ -258,9 +270,14 @@ def over_max(day: Day, entries: list[Entry], teacher_id: str) -> int | None:
     return None
 
 
-def suggest(day: Day, entries: list[Entry], section_id: str, subject_id: str, periods: range, absent: str) -> list[Suggestion]:
+def suggest(
+    day: Day, entries: list[Entry], section_id: str, subject_id: str, periods: range, absent: str,
+    covers: dict[str, int] | None = None,
+) -> list[Suggestion]:
     """Who could take this class: free then, not unavailable, under their daily max, not on leave.
-    Ranked: teaches this subject, then same department as the subject, then anyone; fewest classes that day first."""
+    Ranked: teaches this subject, then same department as the subject, then anyone; then fewest
+    classes that day, then fewest covers this week (so the same teachers aren't always asked)."""
+    covers = covers or {}
     subject = next((s for s in day.data.subjects if s.id == subject_id), None)
     teaches = {a.teacher_id for a in day.data.assignments if a.subject_id == subject_id} | {
         a.lab_teacher_id for a in day.data.assignments if a.subject_id == subject_id and a.lab_teacher_id
@@ -278,14 +295,27 @@ def suggest(day: Day, entries: list[Entry], section_id: str, subject_id: str, pe
         tier: Literal["subject", "department", "anyone"] = (
             "subject" if t.id in teaches else "department" if subject and t.department_id == subject.department_id else "anyone"
         )
-        out.append(Suggestion(teacher_id=t.id, tier=tier, load_today=today_load))
+        out.append(Suggestion(teacher_id=t.id, tier=tier, load_today=today_load, covers_week=covers.get(t.id, 0)))
     order = {"subject": 0, "department": 1, "anyone": 2}
     names = {t.id: t.name for t in day.data.teachers}
-    return sorted(out, key=lambda s: (order[s.tier], s.load_today, names.get(s.teacher_id, s.teacher_id)))
+    return sorted(out, key=lambda s: (order[s.tier], s.load_today, s.covers_week, names.get(s.teacher_id, s.teacher_id)))
 
 
-def classes_of(entries: list[Entry], teacher_id: str, periods: range) -> list[tuple[Entry, int, int]]:
-    """A teacher's classes in these periods, with lab periods merged into one block."""
+def classes_of(
+    entries: list[Entry], teacher_id: str, periods: range, split_labs: bool = False,
+) -> list[tuple[Entry, int, int, int, int]]:
+    """A teacher's classes in these periods: (entry, first, last, block first, block last).
+    Lab periods are merged into one block, or with `split_labs` one row per hour (keeping the block's bounds)."""
+    out: list[tuple[Entry, int, int, int, int]] = []
+    for e, a, b in _blocks(entries, teacher_id, periods):
+        if split_labs and e.kind == "lab" and b > a:
+            out += [(e, p, p, a, b) for p in range(a, b + 1)]
+        else:
+            out.append((e, a, b, a, b))
+    return out
+
+
+def _blocks(entries: list[Entry], teacher_id: str, periods: range) -> list[tuple[Entry, int, int]]:
     mine = sorted((e for e in entries if e.teacher_id == teacher_id and e.period in periods), key=lambda e: (e.section_id, e.period))
     blocks: list[tuple[Entry, int, int]] = []
     for e in mine:
@@ -307,9 +337,9 @@ def change_out(c: DayChange) -> ChangeOut:
 
 
 def approver_title(session: Session, college: College, data: CollegeData | None, teacher_id: str) -> str:
-    """Who approves this teacher's leave: their department's HOD if it has a link, else the admin."""
+    """Who approves this teacher's leave: their department's HOD if it has a link, else the Dean."""
     dept = next((t.department_id for t in (data.teachers if data else []) if t.id == teacher_id), None)
-    return f"HOD ({dept})" if head_of(session, college, dept) else "the admin"
+    return f"HOD ({dept})" if head_of(session, college, dept) else "the Dean"
 
 
 def leave_out(lv: Leave, waiting_for: str | None = None) -> LeaveOut:
@@ -382,7 +412,7 @@ def add_leave(
 ) -> LeaveOut:
     """Ask for leave. A teacher, with their own link, asks for themselves: it waits for their
     department's HOD. The admin may add anyone's leave: approved at once. Nothing changes for
-    students until the admin assigns a substitute or cancels the class."""
+    students until their HOD (or the Dean) assigns a substitute or cancels the class."""
     college = find_college(session, ref)
     admin = is_admin(college, x_admin_key)
     teacher_id = body.teacher_id
@@ -402,7 +432,7 @@ def add_leave(
     lv = Leave(college_id=college.id, teacher_id=teacher_id, date=body.date.isoformat(),
                start_period=periods.start, end_period=periods.stop - 1, reason=body.reason.strip(),
                by="admin" if admin else "teacher", status="approved" if admin else "pending",
-               decided_by="Admin" if admin else "", decided_at=now() if admin else None)
+               decided_by="Dean" if admin else "", decided_at=now() if admin else None)
     session.add(lv)
     session.commit()
     return leave_out(lv, approver_title(session, college, day.data, teacher_id))
@@ -446,7 +476,7 @@ def decide_leave(
     ref: str, leave_id: int, body: LeaveDecision, session: DbSession,
     x_admin_key: Annotated[str | None, Header()] = None, x_member_key: Annotated[str | None, Header()] = None,
 ) -> LeaveOut:
-    """Approve or reject a leave request: the HOD of the teacher's department, or the admin on their behalf."""
+    """Approve or reject a leave request: the HOD of the teacher's department, or the Dean."""
     college = find_college(session, ref)
     lv = session.get(Leave, leave_id)
     if lv is None or lv.college_id != college.id:
@@ -454,7 +484,7 @@ def decide_leave(
     data = published_data(session, college)
     dept = next((t.department_id for t in (data.teachers if data else []) if t.id == lv.teacher_id), None)
     if is_admin(college, x_admin_key):
-        by = "Admin"
+        by = "Dean"
     else:
         _, head = member_access(ref, session, x_member_key)
         require_role(head, "hod")
@@ -469,33 +499,117 @@ def decide_leave(
     return leave_out(lv)
 
 
+# ---------- Cover: the Dean, or an HOD for their own department's classes ----------
+
+
+@dataclass
+class Staff:
+    college: College
+    department: str | None  # None: the Dean, every department
+
+
+def cover_staff(
+    ref: str, session: DbSession,
+    x_admin_key: Annotated[str | None, Header()] = None, x_member_key: Annotated[str | None, Header()] = None,
+) -> Staff:
+    """FastAPI dependency: the Dean, or an HOD (who arranges cover for their own department's sections)."""
+    college = find_college(session, ref)
+    if is_admin(college, x_admin_key):
+        return Staff(college, None)
+    if x_member_key:
+        _, member = member_access(ref, session, x_member_key)
+        if member.role == "hod":
+            return Staff(college, member.department_id)
+    raise HTTPException(403, "Only the Dean or an HOD can arrange cover.")
+
+
+StaffDep = Annotated[Staff, Depends(cover_staff)]
+
+
+def section_department(data: CollegeData, section_id: str) -> str | None:
+    return next((s.department_id for s in data.sections if s.id == section_id), None)
+
+
+def check_department(staff: Staff, data: CollegeData, section_id: str) -> None:
+    if staff.department is not None and section_department(data, section_id) != staff.department:
+        raise HTTPException(403, f"{section_id} belongs to another department: its HOD arranges cover for it.")
+
+
+def rules_of(session: Session, college: College) -> Rules:
+    row = session.get(CollegeRules, college.id)
+    return Rules.model_validate(row.data) if row else Rules()
+
+
+def week_covers(session: Session, college: College, d: date) -> dict[str, int]:
+    """How many classes each teacher covered in the 7 days up to `d`."""
+    rows = session.scalars(select(DayChange).where(
+        DayChange.college_id == college.id, DayChange.kind == "substitute",
+        DayChange.date >= (d - timedelta(days=6)).isoformat(), DayChange.date <= d.isoformat(),
+    ))
+    out: dict[str, int] = {}
+    for c in rows:
+        if c.new_teacher_id:
+            out[c.new_teacher_id] = out.get(c.new_teacher_id, 0) + (c.end_period - c.start_period + 1)
+    return out
+
+
+@router.get("/colleges/{ref}/rules", response_model=Rules)
+def get_rules(staff: StaffDep, session: DbSession) -> Rules:
+    """The college's rules for daily changes (the Dean and HODs)."""
+    return rules_of(session, staff.college)
+
+
+@router.put("/colleges/{ref}/rules", response_model=Rules)
+def set_rules(body: Rules, college: AdminCollegeDep, session: DbSession) -> Rules:
+    """Dean: change the college's rules, e.g. per-period or whole-lab cover."""
+    row = session.get(CollegeRules, college.id)
+    if row is None:
+        session.add(CollegeRules(college_id=college.id, data=body.model_dump()))
+    else:
+        row.data = body.model_dump()
+    session.commit()
+    return body
+
+
 # ---------- Admin ----------
 
 
 @router.get("/colleges/{ref}/cover", response_model=CoverView)
-def cover(college: AdminCollegeDep, session: DbSession, on: Annotated[date, Query(alias="date")]) -> CoverView:
-    """Admin: who is on leave, the classes that need cover (with ranked substitutes), and every change that day."""
+def cover(staff: StaffDep, session: DbSession, on: Annotated[date, Query(alias="date")]) -> CoverView:
+    """Who is on leave, the classes that need cover (with ranked substitutes), and every change that day.
+    The Dean sees every department; an HOD sees the classes of their own department's sections."""
+    college = staff.college
     day = load_day(session, college, on)
     entries = actual(day)
     plain = actual(day, [c for c in day.changes if c.kind == "extra"])  # the day before any cover was arranged
+    split = rules_of(session, college).lab_cover == "per_period"
+    covers = week_covers(session, college, on)
+    teacher_dept = {t.id: t.department_id for t in day.data.teachers}
     leaves: list[LeaveCover] = []
     for lv in day.leaves:
         classes: list[AffectedClass] = []
-        for e, a, b in classes_of(plain, lv.teacher_id, span(lv)) if lv.status != "rejected" else []:
+        for e, a, b, ba, bb in classes_of(plain, lv.teacher_id, span(lv), split) if lv.status != "rejected" else []:
+            if staff.department is not None and section_department(day.data, e.section_id) != staff.department:
+                continue  # another department's class: its own HOD covers it
             periods = range(a, b + 1)
-            done = next((c for c in day.changes if c.kind in ("substitute", "cancel") and c.section_id == e.section_id and set(span(c)) & set(periods)), None)
+            done = next((c for c in day.changes if c.kind in ("substitute", "cancel") and c.section_id == e.section_id
+                         and c.teacher_id == lv.teacher_id and set(span(c)) & set(periods)), None)
             classes.append(AffectedClass(
                 section_id=e.section_id, subject_id=e.subject_id, start_period=a, end_period=b, room_id=e.room_id, batch=e.batch,
-                class_kind=e.kind,
+                class_kind=e.kind, block_start=ba, block_end=bb,
                 state=("awaiting_approval" if lv.status == "pending" else "needs_cover") if done is None
                 else "substitute" if done.kind == "substitute" else "cancelled",
                 change_id=done.id if done else None, new_teacher_id=done.new_teacher_id if done else None,
-                suggestions=[] if done or lv.status != "approved" else suggest(day, entries, e.section_id, e.subject_id, periods, lv.teacher_id),
+                suggestions=[] if done or lv.status != "approved"
+                else suggest(day, entries, e.section_id, e.subject_id, periods, lv.teacher_id, covers),
             ))
+        if staff.department is not None and not classes and teacher_dept.get(lv.teacher_id) != staff.department:
+            continue  # not this HOD's teacher, and no classes of theirs to cover
         waiting = approver_title(session, college, day.data, lv.teacher_id)
         leaves.append(LeaveCover(**leave_out(lv, waiting).model_dump(), classes=classes))
+    changes = [c for c in day.changes if staff.department is None or section_department(day.data, c.section_id) == staff.department]
     return CoverView(date=on, day=day.day, working_day=day.working, leaves=leaves,
-                     changes=[change_out(c) for c in day.changes], check=day_check(day, entries))
+                     changes=[change_out(c) for c in changes], check=day_check(day, entries))
 
 
 @router.delete("/colleges/{ref}/leaves/{leave_id}", status_code=204)
@@ -511,15 +625,17 @@ def remove_leave(leave_id: int, college: AdminCollegeDep, session: DbSession) ->
 
 @router.get("/colleges/{ref}/extra-slots", response_model=list[SlotOption])
 def extra_slots(
-    college: AdminCollegeDep, session: DbSession, on: Annotated[date, Query(alias="date")],
+    staff: StaffDep, session: DbSession, on: Annotated[date, Query(alias="date")],
     section_id: str, teacher_id: str,
 ) -> list[SlotOption]:
-    """Admin: for an extra or makeup class, the periods where the section, the teacher and a suitable room are all free."""
-    day = load_day(session, college, on)
+    """The Dean or the section's HOD: for an extra or makeup class, the periods where the section,
+    the teacher and a suitable room are all free."""
+    day = load_day(session, staff.college, on)
     data = day.data
     section = next((s for s in data.sections if s.id == section_id), None)
     if section is None or teacher_id not in {t.id for t in data.teachers}:
         raise HTTPException(400, "Choose a section and a teacher from the list.")
+    check_department(staff, data, section_id)
     entries = actual(day)
     uses = {t.id: t.use for t in data.room_types}
     rooms = sorted(
@@ -551,20 +667,22 @@ def extra_slots(
 
 
 @router.post("/colleges/{ref}/changes", response_model=ChangeOut, status_code=201)
-def add_change(body: ChangeIn, college: AdminCollegeDep, session: DbSession) -> ChangeOut:
-    """Admin: assign a substitute, cancel a class, or add an extra class. The day it
-    produces is clash-checked before it is saved."""
+def add_change(body: ChangeIn, staff: StaffDep, session: DbSession) -> ChangeOut:
+    """The Dean, or the HOD of the class's own department: assign a substitute, cancel a class,
+    or add an extra class. The day it produces is clash-checked before it is saved."""
+    college = staff.college
     check_date(body.date)
     day = load_day(session, college, body.date)
     data = day.data
     periods = periods_of(day, body.start_period, body.end_period or body.start_period)
     if body.section_id not in {s.id for s in data.sections}:
         raise HTTPException(400, f"No section with the code \"{body.section_id}\".")
+    check_department(staff, data, body.section_id)
     linked = next((lv for lv in day.leaves if lv.id == body.leave_id), None)
     if body.leave_id is not None and linked is None:
         raise HTTPException(400, "That leave isn't on this date.")
     if linked is not None and linked.status != "approved":
-        raise HTTPException(409, "This leave isn't approved yet. Cover is arranged once the HOD (or the admin) approves it.")
+        raise HTTPException(409, "This leave isn't approved yet. Cover is arranged once the HOD (or the Dean) approves it.")
 
     entries = actual(day)
     replaced: list[DayChange] = []
@@ -634,10 +752,14 @@ def add_change(body: ChangeIn, college: AdminCollegeDep, session: DbSession) -> 
 
 
 @router.delete("/colleges/{ref}/changes/{change_id}", status_code=204)
-def remove_change(change_id: int, college: AdminCollegeDep, session: DbSession) -> None:
-    """Admin: undo a change."""
+def remove_change(change_id: int, staff: StaffDep, session: DbSession) -> None:
+    """The Dean, or the class's own HOD: undo a change."""
+    college = staff.college
     c = session.get(DayChange, change_id)
     if c is None or c.college_id != college.id:
         raise HTTPException(404, "No such change.")
+    pub = latest(session, college)
+    if pub is not None:
+        check_department(staff, CollegeData.model_validate(pub.data), c.section_id)
     session.delete(c)
     session.commit()

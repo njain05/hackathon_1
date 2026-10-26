@@ -64,6 +64,8 @@ export interface Suggestion {
   teacher_id: string;
   tier: "subject" | "department" | "anyone";
   load_today: number;
+  /** Classes they covered in the 7 days up to this date (the ranking prefers fewer). */
+  covers_week: number;
 }
 
 export interface AffectedClass {
@@ -75,6 +77,9 @@ export interface AffectedClass {
   class_kind: "lecture" | "lab";
   /** A lab batch (e.g. "A1") when the section's labs run per batch. */
   batch?: string | null;
+  /** The whole lab block (with per-period cover, each hour is its own row): cancelling takes all of it. */
+  block_start: number;
+  block_end: number;
   state: "awaiting_approval" | "needs_cover" | "substitute" | "cancelled";
   change_id: number | null;
   new_teacher_id: string | null;
@@ -114,6 +119,24 @@ export interface NewChange {
 const enc = encodeURIComponent;
 const asAdmin = (a: AdminAccess) => ({ "X-Admin-Key": a.key });
 
+/** Who arranges cover: the Dean (every department) or an HOD (their own department's classes).
+ * The Dean's AdminAccess on its own is accepted too. */
+export type StaffAuth = { admin: AdminAccess } | { member: MemberAccess } | AdminAccess;
+const asStaff = (a: StaffAuth): { admin: AdminAccess } | { member: MemberAccess } => ("admin" in a || "member" in a ? a : { admin: a });
+const staffHeaders = (a: StaffAuth) => {
+  const s = asStaff(a);
+  return "admin" in s ? asAdmin(s.admin) : asMember(s.member);
+};
+const staffCode = (a: StaffAuth) => {
+  const s = asStaff(a);
+  return "admin" in s ? s.admin.code : s.member.college_code;
+};
+
+/** College rules for daily changes, set by the Dean. */
+export interface Rules {
+  lab_cover: "per_period" | "whole";
+}
+
 // ---------- API ----------
 
 export const getDay = (code: string, date: string) => call<DayView>(`/colleges/${enc(code)}/day?date=${enc(date)}`);
@@ -123,7 +146,7 @@ export const getChanges = (code: string, from: string, to: string) =>
 
 export type NewLeave = { teacher_id?: string; date: string; start_period?: number; end_period?: number; reason: string };
 
-/** Leave for anyone, approved at once (admin), or a teacher's own request (waits for their HOD). */
+/** Leave for anyone, approved at once (the Dean), or a teacher's own request (waits for their HOD). */
 export const addLeave = (code: string, body: NewLeave, by: { admin: AdminAccess } | { member: MemberAccess }) =>
   call<Leave>(`/colleges/${enc(code)}/leaves`, {
     method: "POST",
@@ -135,7 +158,7 @@ export const getMyLeaves = (m: MemberAccess) => call<Leave[]>(`/colleges/${enc(m
 
 export const getHodView = (m: MemberAccess) => call<HodView>(`/colleges/${enc(m.college_code)}/hod`, { headers: asMember(m) });
 
-/** The HOD of the teacher's department, or the admin on their behalf. */
+/** The HOD of the teacher's department, or the Dean. */
 export const decideLeave = (code: string, id: number, action: "approve" | "reject", note: string, by: { admin: AdminAccess } | { member: MemberAccess }) =>
   call<Leave>(`/colleges/${enc(code)}/leaves/${id}/decide`, {
     method: "POST",
@@ -149,23 +172,28 @@ export const LEAVE_STATUS: Record<Leave["status"], string> = {
   rejected: "Not approved",
 };
 
-export const getCover = (a: AdminAccess, date: string) =>
-  call<CoverView>(`/colleges/${enc(a.code)}/cover?date=${enc(date)}`, { headers: asAdmin(a) });
+export const getCover = (a: StaffAuth, date: string) =>
+  call<CoverView>(`/colleges/${enc(staffCode(a))}/cover?date=${enc(date)}`, { headers: staffHeaders(a) });
+
+export const getRules = (a: StaffAuth) => call<Rules>(`/colleges/${enc(staffCode(a))}/rules`, { headers: staffHeaders(a) });
+
+export const setRules = (a: AdminAccess, rules: Rules) =>
+  call<Rules>(`/colleges/${enc(a.code)}/rules`, { method: "PUT", headers: asAdmin(a), body: JSON.stringify(rules) });
 
 export const removeLeave = (a: AdminAccess, id: number) =>
   call<null>(`/colleges/${enc(a.code)}/leaves/${id}`, { method: "DELETE", headers: asAdmin(a) });
 
-export const extraSlots = (a: AdminAccess, date: string, sectionId: string, teacherId: string) =>
+export const extraSlots = (a: StaffAuth, date: string, sectionId: string, teacherId: string) =>
   call<SlotOption[]>(
-    `/colleges/${enc(a.code)}/extra-slots?date=${enc(date)}&section_id=${enc(sectionId)}&teacher_id=${enc(teacherId)}`,
-    { headers: asAdmin(a) },
+    `/colleges/${enc(staffCode(a))}/extra-slots?date=${enc(date)}&section_id=${enc(sectionId)}&teacher_id=${enc(teacherId)}`,
+    { headers: staffHeaders(a) },
   );
 
-export const addChange = (a: AdminAccess, body: NewChange) =>
-  call<Change>(`/colleges/${enc(a.code)}/changes`, { method: "POST", headers: asAdmin(a), body: JSON.stringify(body) });
+export const addChange = (a: StaffAuth, body: NewChange) =>
+  call<Change>(`/colleges/${enc(staffCode(a))}/changes`, { method: "POST", headers: staffHeaders(a), body: JSON.stringify(body) });
 
-export const removeChange = (a: AdminAccess, id: number) =>
-  call<null>(`/colleges/${enc(a.code)}/changes/${id}`, { method: "DELETE", headers: asAdmin(a) });
+export const removeChange = (a: StaffAuth, id: number) =>
+  call<null>(`/colleges/${enc(staffCode(a))}/changes/${id}`, { method: "DELETE", headers: staffHeaders(a) });
 
 // ---------- Dates ----------
 

@@ -149,6 +149,27 @@ class Member(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class BookingRoute(Base):
+    """Who approves one booking, in order, fixed when it is asked for: a teacher's request goes to
+    their HOD, then the Dean; a student club's request goes to the Dean. Bookings made before this
+    table existed have no route and use the old configurable chain (approval_steps)."""
+
+    __tablename__ = "booking_routes"
+
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id", ondelete="CASCADE"), primary_key=True)
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON)  # [{"title", "role": "hod"|"dean", "department_id"?}]
+    member_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)  # the teacher who asked, if any
+
+
+class CollegeRules(Base):
+    """College-wide rules the Dean can change, e.g. how a lab is covered when its teacher is away."""
+
+    __tablename__ = "college_rules"
+
+    college_id: Mapped[int] = mapped_column(ForeignKey("colleges.id", ondelete="CASCADE"), primary_key=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
 class Leave(Base):
     """A teacher away on a date, for some periods. A teacher's request waits for their HOD;
     leave the admin enters is approved at once."""

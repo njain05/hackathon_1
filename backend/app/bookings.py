@@ -1,10 +1,12 @@
 """Hall booking with digital approval: this replaces the paper letter.
 
-- Organisers (no login) pick an event room (a room type used for events) and a
-  date, see only the free periods, and send a request. They get a tracking link.
-- The request moves through the admin's approval chain (e.g. HOD → Dean), one
-  step at a time. Each step has its own secret approver link; the admin link may
-  act for any step.
+- A teacher (from their own page) or a student club (the public form) picks any
+  room and a date, sees only the free periods, and sends a request. They get a
+  tracking link.
+- Who approves is fixed when it's asked for: a teacher's request goes to the HOD
+  of their department, then the Dean; a club's request goes to the Dean. The
+  Dean (the admin link) sees every request and may act for any step. Bookings
+  from before this rule keep the old configurable chain (approver links).
 - The backend owns the clash rule: a period is free only if the published
   timetable has no class in the room and no approved or pending booking holds
   it. Every approval checks again, so two approved bookings never overlap.
@@ -21,7 +23,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .colleges import AdminCollegeDep, DbSession, find_college, hash_key, latest
-from .db import ApprovalStep, Booking, BookingAction, College, as_utc, now
+from .db import ApprovalStep, Booking, BookingAction, BookingRoute, College, Member, as_utc, now
+from .members import MemberDep, head_of, member_access
 
 router = APIRouter(tags=["bookings"])
 
@@ -139,16 +142,34 @@ class ApprovalsView(BaseModel):
 
 @dataclass
 class Step:
-    id: int | None  # None: the default single "Admin" step, before the admin sets a chain
+    id: int | None  # an approval_steps row (old configurable chain), else None
     title: str
     position: int
+    role: str = "legacy"  # "hod" | "dean" | "legacy" (an old approver link)
+    department_id: str | None = None  # for "hod": whose HOD
 
 
 def chain(session: Session, college: College) -> list[Step]:
+    """The old configurable chain, for bookings made before routes existed."""
     rows = session.scalars(
         select(ApprovalStep).where(ApprovalStep.college_id == college.id).order_by(ApprovalStep.position)
     ).all()
-    return [Step(r.id, r.title, i) for i, r in enumerate(rows)] or [Step(None, "Admin", 0)]
+    return [Step(r.id, r.title, i) for i, r in enumerate(rows)] or [Step(None, "Dean", 0, "dean")]
+
+
+def route_for(session: Session, college: College, member: Member | None) -> list[dict[str, Any]]:
+    """A teacher's (or in-charge's) request: their HOD, then the Dean. An HOD's or a club's: the Dean."""
+    dean = {"title": "Dean", "role": "dean"}
+    if member is not None and member.role in ("teacher", "incharge") and head_of(session, college, member.department_id):
+        return [{"title": f"HOD ({member.department_id})", "role": "hod", "department_id": member.department_id}, dean]
+    return [dean]
+
+
+def steps_of(session: Session, college: College, b: Booking) -> list[Step]:
+    route = session.get(BookingRoute, b.id)
+    if route is None:
+        return chain(session, college)
+    return [Step(None, s["title"], i, s["role"], s.get("department_id")) for i, s in enumerate(route.steps)]
 
 
 def published(session: Session, college: College) -> dict[str, Any]:
@@ -158,9 +179,9 @@ def published(session: Session, college: College) -> dict[str, Any]:
     return {"data": pub.data, "entries": pub.result.get("entries", [])}
 
 
-def event_rooms(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    uses = {t["id"]: t["use"] for t in data.get("room_types", [])}
-    return {r["id"]: r for r in data.get("rooms", []) if uses.get(r["type"]) == "event"}
+def bookable_rooms(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Any room can be booked for an event (a hall, a study hall, a classroom…) in periods with no class."""
+    return {r["id"]: r for r in data.get("rooms", [])}
 
 
 def working_day(data: dict[str, Any], d: date) -> str | None:
@@ -200,7 +221,7 @@ def busy_periods(
     return busy
 
 
-REASON = {"class": "has a class", "booked": "is already booked", "requested": "is requested by another organiser"}
+REASON = {"class": "has a class", "booked": "is already booked", "requested": "is requested by someone else"}
 
 
 def lock(session: Session, college: College) -> None:
@@ -209,7 +230,7 @@ def lock(session: Session, college: College) -> None:
 
 
 def to_out(session: Session, college: College, b: Booking, pub: dict[str, Any] | None = None) -> BookingOut:
-    steps = chain(session, college)
+    steps = steps_of(session, college, b)
     current = min(b.step, len(steps) - 1)
     actions = session.scalars(select(BookingAction).where(BookingAction.booking_id == b.id).order_by(BookingAction.at, BookingAction.id)).all()
     states: list[StepState] = []
@@ -224,7 +245,7 @@ def to_out(session: Session, college: College, b: Booking, pub: dict[str, Any] |
             state = "later"
         states.append(StepState(title=s.title, state=state))
     pending = b.status == "pending"
-    rooms = event_rooms(pub["data"]) if pub else {}
+    rooms = bookable_rooms(pub["data"]) if pub else {}
     d = date.fromisoformat(b.date)
     return BookingOut(
         id=b.id, token=b.token, room_id=b.room_id, room_name=rooms.get(b.room_id, {}).get("name", b.room_id),
@@ -246,7 +267,12 @@ def latest_pub(session: Session, college: College) -> dict[str, Any] | None:
 
 @dataclass
 class Actor:
-    step: ApprovalStep | None  # None = the admin
+    step: ApprovalStep | None = None  # an old approver link
+    hod: Member | None = None  # an HOD's link
+
+    @property
+    def dean(self) -> bool:
+        return self.step is None and self.hod is None
 
 
 def approver(
@@ -254,18 +280,23 @@ def approver(
     session: DbSession,
     x_admin_key: Annotated[str | None, Header()] = None,
     x_approver_key: Annotated[str | None, Header()] = None,
+    x_member_key: Annotated[str | None, Header()] = None,
 ) -> tuple[College, Actor]:
-    """FastAPI dependency: the college, and who is acting (the admin, or one approval step)."""
+    """FastAPI dependency: the college, and who is acting (the Dean, an HOD, or an old approver link)."""
     college = find_college(session, ref)
     if x_admin_key and secrets.compare_digest(hash_key(x_admin_key), college.admin_key_hash):
-        return college, Actor(None)
+        return college, Actor()
+    if x_member_key:
+        _, member = member_access(ref, session, x_member_key)
+        if member.role == "hod":
+            return college, Actor(hod=member)
     if x_approver_key:
         step = session.scalar(
             select(ApprovalStep).where(ApprovalStep.college_id == college.id, ApprovalStep.key_hash == hash_key(x_approver_key))
         )
         if step is not None:
-            return college, Actor(step)
-    raise HTTPException(403, "This approval link isn't valid any more. Ask the admin for a new one.")
+            return college, Actor(step=step)
+    raise HTTPException(403, "This approval link isn't valid any more. Ask the Dean for a new one.")
 
 
 ApproverDep = Annotated[tuple[College, Actor], Depends(approver)]
@@ -281,11 +312,11 @@ def today() -> date:
 
 @router.get("/colleges/{ref}/availability", response_model=Availability)
 def availability(ref: str, session: DbSession, room_id: str, on: Annotated[date, Query(alias="date")]) -> Availability:
-    """Which periods of this event room are free on this date."""
+    """Which periods of this room are free on this date (no class, no other booking)."""
     college = find_college(session, ref)
     pub = published(session, college)
-    if room_id not in event_rooms(pub["data"]):
-        raise HTTPException(404, f"\"{room_id}\" isn't a hall or room that can be booked for events.")
+    if room_id not in bookable_rooms(pub["data"]):
+        raise HTTPException(404, f"\"{room_id}\" isn't a room of this college.")
     busy = busy_periods(session, college, pub, room_id, on)
     n = periods_on(pub["data"], on)
     return Availability(
@@ -295,15 +326,19 @@ def availability(ref: str, session: DbSession, room_id: str, on: Annotated[date,
 
 
 @router.post("/colleges/{ref}/bookings", response_model=BookingOut, status_code=201)
-def request_booking(ref: str, body: NewBooking, session: DbSession) -> BookingOut:
-    """Send a booking request. It starts at the first approval step."""
+def request_booking(
+    ref: str, body: NewBooking, session: DbSession, x_member_key: Annotated[str | None, Header()] = None,
+) -> BookingOut:
+    """Ask for a room. With a teacher's link it goes to their HOD, then the Dean; from the public form
+    (a student club) it goes to the Dean."""
     college = find_college(session, ref)
+    member = member_access(ref, session, x_member_key)[1] if x_member_key else None
     lock(session, college)
     pub = published(session, college)
-    rooms = event_rooms(pub["data"])
+    rooms = bookable_rooms(pub["data"])
     room = rooms.get(body.room_id)
     if room is None:
-        raise HTTPException(400, f"\"{body.room_id}\" can't be booked. Choose one of the halls in the list.")
+        raise HTTPException(400, f"\"{body.room_id}\" can't be booked. Choose one of the rooms in the list.")
     if body.date < today():
         raise HTTPException(400, "That date has passed. Choose today or a later date.")
     if body.date > today() + timedelta(days=MAX_DAYS_AHEAD):
@@ -328,8 +363,20 @@ def request_booking(ref: str, body: NewBooking, session: DbSession) -> BookingOu
         status="pending", step=0,
     )
     session.add(b)
+    session.flush()
+    session.add(BookingRoute(booking_id=b.id, steps=route_for(session, college, member), member_id=member.id if member else None))
     session.commit()
     return to_out(session, college, b, pub)
+
+
+@router.get("/colleges/{ref}/my-bookings", response_model=list[BookingOut])
+def my_bookings(who: MemberDep, session: DbSession) -> list[BookingOut]:
+    """A teacher's own room requests, newest first."""
+    college, member = who
+    ids = session.scalars(select(BookingRoute.booking_id).where(BookingRoute.member_id == member.id)).all()
+    rows = session.scalars(select(Booking).where(Booking.id.in_(ids)).order_by(Booking.created_at.desc()).limit(100)) if ids else []
+    pub = latest_pub(session, college)
+    return [to_out(session, college, b, pub) for b in rows]
 
 
 def by_token(session: Session, token: str) -> tuple[Booking, College]:
@@ -365,7 +412,7 @@ def events(ref: str, session: DbSession, since: Annotated[date | None, Query(ali
     """The college events calendar: approved bookings from a date on (default: today)."""
     college = find_college(session, ref)
     pub = latest_pub(session, college)
-    rooms = event_rooms(pub["data"]) if pub else {}
+    rooms = bookable_rooms(pub["data"]) if pub else {}
     rows = session.scalars(
         select(Booking)
         .where(Booking.college_id == college.id, Booking.status == "approved", Booking.date >= (since or today()).isoformat())
@@ -390,14 +437,18 @@ def step_out(s: Step, key: str | None = None) -> StepOut:
 
 @router.get("/colleges/{ref}/approvals", response_model=ApprovalsView)
 def approvals(who: ApproverDep, session: DbSession) -> ApprovalsView:
-    """For approvers and the admin: every request, newest first, with the chain."""
+    """The Dean: every request. An HOD: requests from their department's teachers. Newest first."""
     college, actor = who
     steps = chain(session, college)
     pub = latest_pub(session, college)
-    rows = session.scalars(select(Booking).where(Booking.college_id == college.id).order_by(Booking.created_at.desc()).limit(500))
+    rows = list(session.scalars(select(Booking).where(Booking.college_id == college.id).order_by(Booking.created_at.desc()).limit(500)))
     you = None
     if actor.step is not None:
         you = next(step_out(s) for s in steps if s.id == actor.step.id)
+    if actor.hod is not None:
+        dept = actor.hod.department_id
+        you = StepOut(id=None, title=f"HOD ({dept})", position=0)
+        rows = [b for b in rows if any(s.role == "hod" and s.department_id == dept for s in steps_of(session, college, b))]
     return ApprovalsView(you=you, steps=[step_out(s) for s in steps], bookings=[to_out(session, college, b, pub) for b in rows])
 
 
@@ -411,13 +462,19 @@ def decide(booking_id: int, body: Decision, who: ApproverDep, session: DbSession
         raise HTTPException(404, "No such booking request.")
     if b.status != "pending":
         raise HTTPException(409, f"This request is already {b.status}.")
-    steps = chain(session, college)
+    steps = steps_of(session, college, b)
     current = steps[min(b.step, len(steps) - 1)]
-    if actor.step is not None and actor.step.id != current.id:
+    if actor.step is not None and (current.role != "legacy" or actor.step.id != current.id):
         raise HTTPException(409, f"This request is waiting for {current.title}, not {actor.step.title}. It moves to you after them.")
+    if actor.hod is not None and (current.role != "hod" or current.department_id != actor.hod.department_id):
+        raise HTTPException(409, f"This request is waiting for {current.title}.")
 
-    name = body.by.strip()
-    by = (current.title if actor.step else f"Admin, for {current.title}") + (f" ({name})" if name else "")
+    name = body.by.strip() or (actor.hod.name if actor.hod else "")
+    if actor.dean:
+        who_text = "Dean" if current.role == "dean" else f"Dean, for {current.title}"
+    else:
+        who_text = current.title
+    by = who_text + (f" ({name})" if name else "")
     if body.action == "approve":
         pub = published(session, college)
         clash = busy_periods(session, college, pub, b.room_id, date.fromisoformat(b.date), ignore=b.id, approved_only=True)

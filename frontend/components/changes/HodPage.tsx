@@ -11,6 +11,8 @@ import { type MemberAccess, setMemberAccess, useMemberAccess, useOpenMemberLink 
 import type { CollegeData } from "@/lib/types";
 import InchargeLink from "@/components/department/InchargeLink";
 import RoomSharing from "@/components/department/RoomSharing";
+import HodRequests from "@/components/bookings/HodRequests";
+import HodCover from "./HodCover";
 import { LeaveBadge, leaveStatusText } from "./TeacherPage";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
@@ -116,7 +118,7 @@ export default function HodPage() {
           <h1 className="text-3xl font-bold">HOD page</h1>
           {opening.error && <p className="text-lg font-semibold text-err">{opening.error}</p>}
           <p className="text-lg text-ink-soft">
-            This page is for heads of department. Open the private HOD link the timetable admin sent you.
+            This page is for heads of department. Open the private HOD link the Dean sent you.
           </p>
           <Link href="/my" className="btn-quiet w-fit">
             My timetable
@@ -137,8 +139,9 @@ export default function HodPage() {
           <p className="text-sm font-semibold text-ink-soft">HOD page · {hod.department_name}</p>
           <h1 className="text-2xl font-bold sm:text-3xl">Leave requests{hod.name ? `, ${hod.name}` : ""}</h1>
           <p className="text-ink-soft">
-            Teachers of {hod.department_name} ask for leave from their teacher page. Once you approve, the timetable
-            in-charge arranges a substitute or cancels the class.
+            Teachers of {hod.department_name} ask for leave from their teacher page. Once you approve, you pick a
+            substitute (or cancel) for your department’s classes under “Leave cover”. Classes in other departments are
+            covered by their own HOD.
           </p>
         </div>
 
@@ -181,6 +184,9 @@ export default function HodPage() {
             )}
           </>
         )}
+
+        <HodCover hod={hod} data={data} />
+        <HodRequests hod={hod} data={data} />
 
         {/* Department setup, in-charge and room sharing (components/department/*). */}
         <section className="flex flex-col gap-2 rounded-md border border-line bg-paper p-4">

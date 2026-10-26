@@ -9,26 +9,20 @@ import {
   type ApprovalsView,
   type ApproverAuth,
   type Booking,
-  type Step,
   approverFromHash,
-  approverLink,
   decideBooking,
   getApprovals,
-  newApproverLink,
-  saveApproverLink,
-  setApprovalSteps,
   setApproverAccess,
   useApproverAccess,
-  useSavedApproverLinks,
 } from "@/lib/bookings";
-import { type AdminAccess, getPublished, useAdminAccess } from "@/lib/cloud";
+import { getPublished, useAdminAccess } from "@/lib/cloud";
 import type { CollegeData } from "@/lib/types";
 import { BookingFacts, History, StatusBadge, StepsTrail, whereItIs } from "./common";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
 /** One request, with Approve / Reject when it's this person's turn. */
-function RequestCard({ b, data, auth, canAct, onDone }: {
+export function RequestCard({ b, data, auth, canAct, onDone }: {
   b: Booking;
   data: CollegeData | null;
   auth: ApproverAuth;
@@ -93,126 +87,6 @@ function RequestCard({ b, data, auth, canAct, onDone }: {
         </div>
       )}
     </article>
-  );
-}
-
-/** Admin: who approves, in order, and each approver's secret link. */
-function ChainEditor({ admin, steps, onSaved }: { admin: AdminAccess; steps: Step[]; onSaved: () => void }) {
-  const isDefault = steps.length === 1 && steps[0].id === null;
-  const [rows, setRows] = useState(isDefault ? [] : steps.map((s) => ({ id: s.id, title: s.title })));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const links = useSavedApproverLinks(admin.code);
-  const changed = JSON.stringify(rows) !== JSON.stringify(isDefault ? [] : steps.map((s) => ({ id: s.id, title: s.title })));
-
-  const keep = (s: Step) => {
-    if (s.id !== null && s.key) saveApproverLink(admin.code, s.id, approverLink(admin.code, s, s.key));
-  };
-
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const out = await setApprovalSteps(admin, rows.map((r) => ({ id: r.id, title: r.title.trim() })));
-      out.forEach(keep);
-      onSaved();
-    } catch (e) {
-      setError(errorText(e, "Couldn't save the approval steps."));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const makeLink = async (s: Step) => {
-    if (links[String(s.id)] && !window.confirm(`Make a new link for ${s.title}? Their old link will stop working.`)) return;
-    try {
-      keep(await newApproverLink(admin, s.id!));
-    } catch (e) {
-      setError(errorText(e, "Couldn't make a new link."));
-    }
-  };
-
-  const move = (i: number, by: number) => {
-    const next = [...rows];
-    [next[i], next[i + by]] = [next[i + by], next[i]];
-    setRows(next);
-  };
-
-  return (
-    <section className="flex flex-col gap-4 rounded-md border border-line bg-paper p-4" aria-label="Approval steps">
-      <div>
-        <h2 className="text-lg font-bold">Who approves, in order</h2>
-        <p className="text-ink-soft">
-          {isDefault && rows.length === 0
-            ? "Right now you (the admin) approve every request yourself. Add steps such as HOD, then Dean, to send each request through them one by one."
-            : "Each request goes to the first step, then the next. Every approver gets a private link to approve from their own phone."}
-        </p>
-      </div>
-      {rows.length > 0 && (
-        <ol className="flex flex-col gap-2">
-          {rows.map((r, i) => (
-            <li key={r.id ?? `new-${i}`} className="flex flex-wrap items-center gap-2">
-              <span className="w-6 font-semibold">{i + 1}.</span>
-              <input
-                className="field min-w-0 flex-1"
-                aria-label={`Step ${i + 1} title`}
-                maxLength={80}
-                placeholder="e.g. HOD"
-                value={r.title}
-                onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
-              />
-              <button type="button" className="btn-quiet" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move step ${i + 1} up`}>
-                ↑
-              </button>
-              <button type="button" className="btn-quiet" disabled={i === rows.length - 1} onClick={() => move(i, 1)} aria-label={`Move step ${i + 1} down`}>
-                ↓
-              </button>
-              <button type="button" className="btn-quiet" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
-                Remove
-              </button>
-            </li>
-          ))}
-        </ol>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn-quiet" disabled={rows.length >= 5} onClick={() => setRows([...rows, { id: null, title: "" }])}>
-          Add a step
-        </button>
-        {changed && (
-          <button type="button" className="btn-primary" disabled={busy || rows.length === 0 || rows.some((r) => !r.title.trim())} onClick={save}>
-            {busy ? "Saving…" : "Save steps"}
-          </button>
-        )}
-        {changed && rows.length === 0 && <span className="hint">Keep at least one step.</span>}
-      </div>
-
-      {!isDefault && !changed && (
-        <div className="flex flex-col gap-3 border-t border-line pt-3">
-          <p className="font-semibold">Send each approver their own link</p>
-          {steps.map((s) =>
-            links[String(s.id)] ? (
-              <div key={s.id} className="flex flex-col gap-1">
-                <CopyField label={`${s.title}’s approval link (private)`} value={links[String(s.id)]} />
-                <button type="button" className="w-fit text-sm font-semibold text-navy underline" onClick={() => makeLink(s)}>
-                  Make a new link for {s.title}
-                </button>
-              </div>
-            ) : (
-              <div key={s.id} className="flex flex-wrap items-center gap-3">
-                <span>
-                  <span className="font-semibold">{s.title}:</span>{" "}
-                  <span className="text-ink-soft">the link was made on another device.</span>
-                </span>
-                <button type="button" className="btn-quiet" onClick={() => makeLink(s)}>
-                  Make a new link
-                </button>
-              </div>
-            ),
-          )}
-        </div>
-      )}
-      {error && <p className="font-semibold text-err">{error}</p>}
-    </section>
   );
 }
 
@@ -292,7 +166,7 @@ export default function Approvals() {
           <h1 className="text-3xl font-bold">Booking approvals</h1>
           {opened && <p className="text-lg font-semibold text-err">{opened.error}</p>}
           <p className="text-lg text-ink-soft">
-            Approvers: open the private approval link the timetable in-charge sent you. Admins: open your admin link
+            HODs: your requests are on your HOD page. The Dean: open the Dean’s link
             first, then come back here.
           </p>
           <Link href="/book" className="btn-quiet w-fit">
@@ -324,7 +198,7 @@ export default function Approvals() {
           <h1 className="text-2xl font-bold sm:text-3xl">Booking approvals</h1>
           <p className="text-ink-soft">
             {mode === "admin"
-              ? "You’re the admin: you can approve or reject at any step."
+              ? "You’re the Dean: you see every request and can approve or reject at any step."
               : you
                 ? `You approve as ${you.title} (step ${you.position + 1} of ${v?.steps.length ?? 1}). ${
                     you.position === 0 ? "New requests come to you first." : `Requests reach you once ${v?.steps[you.position - 1]?.title} has approved.`
@@ -341,7 +215,7 @@ export default function Approvals() {
                   onClick={() => setChoice(m)}
                   className={`rounded px-3 py-1.5 text-sm font-semibold ${mode === m ? "bg-sky/50" : "hover:bg-blush"}`}
                 >
-                  {m === "admin" ? "As admin" : `As ${approver.step || "approver"}`}
+                  {m === "admin" ? "As Dean" : `As ${approver.step || "approver"}`}
                 </button>
               ))}
             </div>
@@ -362,9 +236,15 @@ export default function Approvals() {
 
         {v && mode === "admin" && admin && (
           <>
-            <ChainEditor key={JSON.stringify(v.steps)} admin={admin} steps={v.steps} onSaved={reloadView} />
+            <section className="flex flex-col gap-1 rounded-md border border-line bg-paper p-4" aria-label="Who approves">
+              <h2 className="text-lg font-bold">Who approves</h2>
+              <p className="text-ink-soft">
+                A teacher’s request goes to the HOD of their department first, then to you. A student club’s request
+                comes straight to you. You can approve or reject at any step.
+              </p>
+            </section>
             <section className="rounded-md border border-line bg-paper p-4">
-              <CopyField label="Booking link for organisers (clubs, societies, departments)" value={bookLink} />
+              <CopyField label="Booking link for student clubs and societies (teachers book from their own page)" value={bookLink} />
             </section>
           </>
         )}

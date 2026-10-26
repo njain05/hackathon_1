@@ -7,6 +7,7 @@
 import { useMemo } from "react";
 import { call } from "./api";
 import type { AdminAccess } from "./cloud";
+import type { MemberAccess } from "./members";
 import { readLocal, useLocal, writeLocal } from "./local";
 import { dayBlocks, formatTime } from "./periods";
 import type { CollegeData, Room } from "./types";
@@ -99,21 +100,32 @@ export interface NewBooking {
   contact: string;
 }
 
-/** Who is approving: the admin (their key) or one step's approver (that step's key). */
-export type ApproverAuth = { admin: Pick<AdminAccess, "code" | "key"> } | { code: string; key: string };
+/** Who is approving: the Dean (admin link), an HOD (their link), or an old per-step approver link. */
+export type ApproverAuth =
+  | { admin: Pick<AdminAccess, "code" | "key"> }
+  | { member: Pick<MemberAccess, "college_code" | "key"> }
+  | { code: string; key: string };
 
 const enc = encodeURIComponent;
 const authHeaders = (a: ApproverAuth): Record<string, string> =>
-  "admin" in a ? { "X-Admin-Key": a.admin.key } : { "X-Approver-Key": a.key };
-const authCode = (a: ApproverAuth) => ("admin" in a ? a.admin.code : a.code);
+  "admin" in a ? { "X-Admin-Key": a.admin.key } : "member" in a ? { "X-Member-Key": a.member.key } : { "X-Approver-Key": a.key };
+const authCode = (a: ApproverAuth) => ("admin" in a ? a.admin.code : "member" in a ? a.member.college_code : a.code);
 
 // ---------- API ----------
 
 export const getAvailability = (code: string, roomId: string, date: string) =>
   call<Availability>(`/colleges/${enc(code)}/availability?room_id=${enc(roomId)}&date=${enc(date)}`);
 
-export const requestBooking = (code: string, b: NewBooking) =>
-  call<Booking>(`/colleges/${enc(code)}/bookings`, { method: "POST", body: JSON.stringify(b) });
+/** A teacher's request (their link) goes to their HOD, then the Dean; without a link (a student club) to the Dean. */
+export const requestBooking = (code: string, b: NewBooking, teacher?: Pick<MemberAccess, "key"> | null) =>
+  call<Booking>(`/colleges/${enc(code)}/bookings`, {
+    method: "POST",
+    headers: teacher ? { "X-Member-Key": teacher.key } : {},
+    body: JSON.stringify(b),
+  });
+
+export const getMyBookings = (m: Pick<MemberAccess, "college_code" | "key">) =>
+  call<Booking[]>(`/colleges/${enc(m.college_code)}/my-bookings`, { headers: { "X-Member-Key": m.key } });
 
 export const trackBooking = (token: string) => call<Booking>(`/bookings/${enc(token)}`);
 

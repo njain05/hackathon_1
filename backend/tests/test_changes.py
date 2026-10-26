@@ -108,7 +108,7 @@ def test_leave_lists_classes_with_ranked_substitutes(college: dict[str, Any]) ->
             assert s["teacher_id"] != "HK"
             assert not busy(before, s["teacher_id"], periods)  # free that period
 
-    # Leave alone changes nothing for students until the admin acts.
+    # Leave alone changes nothing for students until the HOD or Dean acts.
     assert day(college)["entries"] == before
     assert day(college)["check"]["ok"] is True
 
@@ -138,9 +138,10 @@ def test_substitute_and_cancel_change_the_day(college: dict[str, Any]) -> None:
     # Cancel another class: it disappears from the day; undo brings it back.
     if rest:
         nxt = rest[0]
-        res = change(college, kind="cancel", section_id=nxt["section_id"], start_period=nxt["start_period"], end_period=nxt["end_period"])
+        # Cancelling takes the whole class (a lab's whole block, even when it's covered hour by hour).
+        res = change(college, kind="cancel", section_id=nxt["section_id"], start_period=nxt["block_start"], end_period=nxt["block_end"])
         assert res.status_code == 201
-        gone = range(nxt["start_period"], nxt["end_period"] + 1)
+        gone = range(nxt["block_start"], nxt["block_end"] + 1)
         assert not any(e["section_id"] == nxt["section_id"] and e["period"] in gone for e in day(college)["entries"])
         assert client.delete(f"/colleges/{college['code']}/changes/{res.json()['id']}", headers=college["admin"]).status_code == 204
         assert any(e["section_id"] == nxt["section_id"] and e["period"] in gone for e in day(college)["entries"])
@@ -258,21 +259,75 @@ def test_extra_class_slots_and_booking(college: dict[str, Any]) -> None:
     assert len(s["entries"]) == 2 and s["check"]["ok"] is True
 
 
-def test_only_the_admin_changes_the_day(college: dict[str, Any]) -> None:
+def test_only_the_dean_or_the_classs_hod_changes_the_day(college: dict[str, Any]) -> None:
     code = college["code"]
     body = {"date": MONDAY.isoformat(), "kind": "cancel", "section_id": "CSE-3A", "start_period": 1}
-    assert client.post(f"/colleges/{code}/changes", json=body).status_code == 403
-    assert client.get(f"/colleges/{code}/cover", params={"date": MONDAY.isoformat()}).status_code == 403
-    assert client.get(f"/colleges/{code}/extra-slots", params={"date": MONDAY.isoformat(), "section_id": "CSE-3A", "teacher_id": "HK"}).status_code == 403
+    teacher = teacher_key(college, "AS")
+    for headers in ({}, teacher):  # students and teachers can't
+        assert client.post(f"/colleges/{code}/changes", json=body, headers=headers).status_code == 403
+        assert client.get(f"/colleges/{code}/cover", params={"date": MONDAY.isoformat()}, headers=headers).status_code == 403
+        assert client.get(f"/colleges/{code}/extra-slots", headers=headers,
+                          params={"date": MONDAY.isoformat(), "section_id": "CSE-3A", "teacher_id": "HK"}).status_code == 403
 
-    # Removing a leave removes the cover arranged for it.
+    # HK (CSE) is away. The CSE HOD sees and covers CSE classes; the ECE HOD sees nothing of it and can't touch CSE.
+    cse, ece = hod_key(college, "CSE"), hod_key(college, "ECE")
     lv = leave(college, "HK", admin=True).json()
-    cls = cover(college)["leaves"][0]["classes"][0]
-    change(college, kind="cancel", section_id=cls["section_id"], start_period=cls["start_period"], end_period=cls["end_period"], leave_id=lv["id"])
+    as_cse = client.get(f"/colleges/{code}/cover", params={"date": MONDAY.isoformat()}, headers=cse).json()
+    classes = as_cse["leaves"][0]["classes"]
+    assert classes and all(c["section_id"].startswith("CSE") for c in classes)
+    assert client.get(f"/colleges/{code}/cover", params={"date": MONDAY.isoformat()}, headers=ece).json()["leaves"] == []
+    cls = classes[0]
+    whole = {"date": MONDAY.isoformat(), "kind": "cancel", "section_id": cls["section_id"], "start_period": cls["block_start"],
+             "end_period": cls["block_end"], "teacher_id": "HK", "leave_id": lv["id"]}
+    assert client.post(f"/colleges/{code}/changes", json=whole, headers=ece).status_code == 403
+    made = client.post(f"/colleges/{code}/changes", json=whole, headers=cse)
+    assert made.status_code == 201
+    assert client.delete(f"/colleges/{code}/changes/{made.json()['id']}", headers=ece).status_code == 403
     assert len(day(college)["changes"]) == 1
+
+    # Removing a leave (the Dean) removes the cover arranged for it.
     assert client.delete(f"/colleges/{code}/leaves/{lv['id']}").status_code == 403
     assert client.delete(f"/colleges/{code}/leaves/{lv['id']}", headers=college["admin"]).status_code == 204
     assert day(college)["changes"] == []
+
+
+def test_lab_cover_per_period_or_whole_and_fair_ranking(college: dict[str, Any], sample_result: SolveResult) -> None:
+    code = college["code"]
+    # Find a weekday where some teacher has a 2-period lab.
+    for i, dname in enumerate(sample_college().settings.days):
+        labs = [e for e in sample_result.entries if e.day == dname and e.kind == "lab"]
+        if labs:
+            break
+    when = MONDAY + timedelta(days=i)
+    t = labs[0].teacher_id
+    leave(college, t, d=when, admin=True)
+
+    def lab_rows() -> list[dict[str, Any]]:
+        info = next(lv for lv in cover(college, when)["leaves"] if lv["teacher_id"] == t)
+        return [c for c in info["classes"] if c["class_kind"] == "lab" and c["section_id"] == labs[0].section_id]
+
+    # Default: per period, each lab hour its own row with its own ranked substitutes.
+    rows = lab_rows()
+    assert len(rows) >= 2 and all(r["start_period"] == r["end_period"] for r in rows)
+    assert all(r["block_end"] > r["block_start"] for r in rows)
+    first, second = rows[0], rows[1]
+    a = first["suggestions"][0]["teacher_id"]
+    assert change(college, date=when.isoformat(), kind="substitute", section_id=first["section_id"],
+                  start_period=first["start_period"], new_teacher_id=a, teacher_id=t).status_code == 201
+    # Fairness: the teacher who just covered drops below equals for the next hour.
+    nxt = next(r for r in lab_rows() if r["start_period"] == second["start_period"])
+    ranks = [s["teacher_id"] for s in nxt["suggestions"]]
+    peers = [s for s in nxt["suggestions"] if s["tier"] == first["suggestions"][0]["tier"]
+             and s["load_today"] == first["suggestions"][0]["load_today"]]
+    if a in ranks and len(peers) > 1:
+        assert next(s for s in nxt["suggestions"] if s["teacher_id"] == a)["covers_week"] == 1
+        assert peers[0]["teacher_id"] != a
+
+    # The Dean switches the college to whole-lab cover: one row for the whole lab.
+    assert client.put(f"/colleges/{code}/rules", json={"lab_cover": "whole"}, headers=teacher_key(college, "AS")).status_code == 403
+    assert client.put(f"/colleges/{code}/rules", json={"lab_cover": "whole"}, headers=college["admin"]).json() == {"lab_cover": "whole"}
+    whole = lab_rows()
+    assert len(whole) == 1 and whole[0]["end_period"] > whole[0]["start_period"]
 
 
 def test_leave_rules_and_changes_range(college: dict[str, Any]) -> None:
@@ -349,10 +404,10 @@ def test_hod_decides_only_their_department(college: dict[str, Any]) -> None:
     assert client.get(f"/colleges/{code}/hod", headers=cse).status_code == 403
 
 
-def test_without_an_hod_the_admin_approves(college: dict[str, Any]) -> None:
+def test_without_an_hod_the_dean_approves(college: dict[str, Any]) -> None:
     lv = leave(college, "HK").json()
-    assert lv["waiting_for"] == "the admin"
+    assert lv["waiting_for"] == "the Dean"
     heads = client.get(f"/colleges/{college['code']}/departments/heads", headers=college["admin"]).json()
     assert {h["department_id"]: h["has_link"] for h in heads} == {"CSE": False, "ECE": False}
     done = decide(college, lv["id"], "approve", college["admin"]).json()
-    assert done["status"] == "approved" and done["decided_by"] == "Admin"
+    assert done["status"] == "approved" and done["decided_by"] == "Dean"
