@@ -90,6 +90,13 @@ Update after every completed step. Newest entries at the top of each section.
     - a fake sleeping server (503 for 15 s): the banner showed, then cleared, and the badge turned "Server connected";
     - lint and type check pass; 26 backend tests pass.
   - Built in a scratch copy (not `frontend/.next`), because the P2 session works in the same folder.
+  - **Live site**: https://college-timetable-teal.vercel.app (Vercel project `college-timetable`, root `frontend`, connected to GitHub so every push to `main` redeploys; note `college-timetable.vercel.app` is someone else's). Created with the Vercel CLI (`vercel api`), with `NEXT_PUBLIC_API_URL` set for production and preview.
+  - **Live end-to-end check** (2026-10-26, against Supabase Postgres):
+    - home shows "Server connected";
+    - Load sample → Save online & share (code R5E44F) → Generate (22 s, Verified 0 clashes) → Publish (version 1);
+    - in a browser with no saved data, at 375px: `/c/R5E44F` → /my loads the published timetable from the server and shows the Today card.
+    - `/health/db` reports ok. A wrong or missing admin key is refused (403).
+  - Deploy gotchas hit: (1) `DATABASE_URL` was first set to Supabase's project URL (`https://…supabase.co`), which gave the error `dialects:http`; it needs the **Session pooler** `postgresql://` URI. (2) `FRONTEND_ORIGINS` must hold the exact Vercel URL. Both are in the README troubleshooting.
   - **Live backend**: https://college-timetable-api.onrender.com. `/health`, `/sample` and CORS work.
     - With 8 solver threads, Generate for the sample took 20 s (hit the limit) and scored 130 instead of 32, because the free plan has about 0.1 CPU.
     - Measured locally at equal CPU time: 2 threads is best (score 32 with 4 CPU-seconds), and 8 threads found **no** timetable with 2 CPU-seconds.

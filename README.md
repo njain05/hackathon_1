@@ -2,6 +2,8 @@
 
 Clash-free timetables and hall bookings for any college.
 
+**Live demo:** <https://college-timetable-teal.vercel.app>. Click **Set up your college → Load sample college → Check & generate**. The first visit may take up to a minute while the free server wakes up. (Server: <https://college-timetable-api.onrender.com/health>.)
+
 - **Admins** generate timetables, using Google OR-Tools CP-SAT.
 - **Teachers and students** view their own schedules.
 - **Organisers** book seminar halls with digital approval.
