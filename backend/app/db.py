@@ -131,6 +131,44 @@ class BookingAction(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class Leave(Base):
+    """A teacher away on a date, for some periods. Reported by the teacher or added by the admin."""
+
+    __tablename__ = "leaves"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    college_id: Mapped[int] = mapped_column(ForeignKey("colleges.id", ondelete="CASCADE"), index=True)
+    teacher_id: Mapped[str] = mapped_column(String(80))
+    date: Mapped[str] = mapped_column(String(10), index=True)  # YYYY-MM-DD
+    start_period: Mapped[int] = mapped_column(Integer)
+    end_period: Mapped[int] = mapped_column(Integer)  # inclusive
+    reason: Mapped[str] = mapped_column(String(300), default="")
+    by: Mapped[str] = mapped_column(String(20))  # admin | teacher
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class DayChange(Base):
+    """One dated change on top of the published timetable: a substitute, a cancelled class or an extra class."""
+
+    __tablename__ = "day_changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    college_id: Mapped[int] = mapped_column(ForeignKey("colleges.id", ondelete="CASCADE"), index=True)
+    date: Mapped[str] = mapped_column(String(10), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # substitute | cancel | extra
+    section_id: Mapped[str] = mapped_column(String(80))
+    subject_id: Mapped[str] = mapped_column(String(80))
+    start_period: Mapped[int] = mapped_column(Integer)
+    end_period: Mapped[int] = mapped_column(Integer)  # inclusive
+    teacher_id: Mapped[str] = mapped_column(String(80))  # the usual teacher (extra: who teaches it)
+    new_teacher_id: Mapped[str | None] = mapped_column(String(80), nullable=True)  # substitute only
+    room_id: Mapped[str] = mapped_column(String(80))
+    class_kind: Mapped[str] = mapped_column(String(10), default="lecture")  # lecture | lab
+    note: Mapped[str] = mapped_column(String(300), default="")
+    leave_id: Mapped[int | None] = mapped_column(ForeignKey("leaves.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 def normalise_url(url: str) -> str:
     """Supabase and Render hand out postgres:// URLs; SQLAlchemy needs the driver named."""
     for prefix in ("postgres://", "postgresql://"):

@@ -15,10 +15,14 @@ const LINKS = [
 
 export default function AppNav({ collegeName }: { collegeName?: string }) {
   const path = usePathname();
-  // Approvals only for people holding an admin or approver link on this device.
+  // Changes (admin) and Approvals only for people holding an admin or approver link on this device.
   const admin = useAdminAccess();
   const approver = useApproverAccess();
-  const links = admin || approver ? [...LINKS, { href: "/approvals", label: "Approvals" }] : LINKS;
+  const links = [
+    ...LINKS,
+    ...(admin ? [{ href: "/changes", label: "Changes" }] : []),
+    ...(admin || approver ? [{ href: "/approvals", label: "Approvals" }] : []),
+  ];
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-line px-4 py-3 sm:px-6 print:hidden">
       <Link href="/" className="mr-auto truncate font-bold">
