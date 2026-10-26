@@ -9,6 +9,8 @@ import { type HodView, type Leave, decideLeave, getHodView, names, shortDate } f
 import { getPublished } from "@/lib/cloud";
 import { type MemberAccess, setMemberAccess, useMemberAccess, useOpenMemberLink } from "@/lib/members";
 import type { CollegeData } from "@/lib/types";
+import InchargeLink from "@/components/department/InchargeLink";
+import RoomSharing from "@/components/department/RoomSharing";
 import { LeaveBadge, leaveStatusText } from "./TeacherPage";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
@@ -179,6 +181,23 @@ export default function HodPage() {
             )}
           </>
         )}
+
+        {/* Department setup, in-charge and room sharing (components/department/*). */}
+        <section className="flex flex-col gap-2 rounded-md border border-line bg-paper p-4">
+          <h2 className="text-xl font-bold">{hod.department_name} setup</h2>
+          <p className="hint">Enter or check your department&apos;s rooms, teachers, sections and subjects, and mark it ready.</p>
+          <Link href="/department" className="btn-primary w-fit">
+            Open {hod.department_name} setup
+          </Link>
+        </section>
+        <InchargeLink
+          staff={{ member: hod }}
+          dept={hod.department_id}
+          teachers={(data?.teachers ?? [])
+            .filter((t) => t.department_id === hod.department_id)
+            .map((t) => ({ id: t.id, name: t.name || t.id }))}
+        />
+        <RoomSharing staff={{ member: hod }} dept={hod.department_id} data={data} canDecide />
 
         <button
           type="button"

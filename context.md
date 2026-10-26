@@ -29,10 +29,11 @@ Everything about a college comes from the admin's data. Nothing is hard-coded: n
 - **Subject**: id (code), name, department, `lecture_hours` and `lab_hours` a week, `lab_block_length` (periods in a row per lab, default 2), optional `lab_room_type` (e.g. labs only in electronics labs).
 - **Teacher**:
   - id (short code), name and home department. A teacher can teach any department.
-  - Optional `max_periods_per_day` (hard limit).
+  - Optional `max_periods_per_day` and `max_periods_per_week` (hard limits; the weekly one keeps workload fair).
   - `unavailable`: a list of (day, period) they can't teach, entered as "Mon 1-2, Sat all day".
 - **Assignment**: (section, subject, teacher, optional lab teacher). Who teaches what. The lab teacher defaults to the lecture teacher.
-- **Room**: id (code), name, type (a room type id), capacity, optional department. If a department is set, only its sections use the room; if not, the room is shared.
+- **Room**: id (code), name, type (a room type id), capacity, optional department. If a department is set, only its sections use the room, plus any departments in `shared_with` (added when the room's HOD approves a sharing request); if not, the room is shared by everyone.
+- **Open elective group** (`elective_groups`): id, name, member `section_ids`, `periods_per_week`, and options (subject, teacher, expected students). All options run in the same periods, each with its own teacher and room. Member sections are blocked while the group meets. An option may use rooms of its subject's department, shared rooms, or rooms another department has shared with it. Output entries have `kind: "elective"`, `elective_group` and `elective_sections`.
 - **Timetable (output)**: `SolveResult` contains:
   - status (`solved` | `infeasible` | `invalid` | `timeout`)
   - entries (day, 1-based period, section, subject, teacher, room, kind)
@@ -74,9 +75,23 @@ The model is built so each of these is an **additive, optional field**: existing
 | Teachers shared across departments | **Built** | `department_id` is only the home department; assignments may cross departments |
 | Teacher unavailable times | **Built** | `teacher.unavailable[]`: a hard constraint in the solver, also checked by the checker and pre-checks |
 | Lab batches (section split into groups) | Planned | `section.batches: [{id, strength}]` + `assignment.lab_by_batch: bool`. Each batch gets its own lab variables. Batches of one section may share a slot in different labs (or rotate subjects), but block the whole section. Capacity is checked per batch. |
-| Combined / elective classes across sections | Planned | `assignment.section_ids: [..]` (today's `section_id` becomes the 1-element case) for combined lectures. Electives as `elective_groups: [{sections, options: [assignment…]}]` running in the same slot in parallel rooms. |
+| Open electives across sections | **Built** | `elective_groups[]` (see Data model): parallel options in the same periods, each with its own teacher and room; solver, pre-checks, independent checker, setup table and timetable views. |
+| Room sharing between departments | **Built** | `room.shared_with[]`, filled when the room's HOD approves a request (`backend/app/departments.py`). |
+| Fair teacher workload | **Built** | `teacher.max_periods_per_week` (hard cap) + a Check-step warning when a teacher is far above their department's average. |
+| Combined lectures (two sections in one room) | Planned | `assignment.section_ids: [..]` (today's `section_id` becomes the 1-element case). |
 | Multiple shifts (morning/evening) | Planned | `settings.shifts: [{id, days, day_start, periods_per_day, breaks}]` + `section.shift_id`. Today's settings become the single default shift. Rooms and teachers are shared across shifts using clock-time overlap. |
 | Teacher preferences ("no classes before 10 on Fri") | Planned | `teacher.preferred_off: [slot]` as a soft penalty (unlike the hard `unavailable`) |
+
+### Roles: who does what
+| Role | How they get in | Can do |
+|---|---|---|
+| **Super admin** | The admin link made when the college is created | Everything: the week, room types, departments, every department's data, open electives, appointing HODs and teacher links, generating and **publishing** |
+| **HOD** | HOD link from the admin (`/hod`) | Approve leave for their department; appoint the department's **timetable in-charge**; approve or reject **room-sharing** requests for their rooms; edit their department's setup |
+| **Timetable in-charge** | In-charge link from their HOD (`/department`) | Edit their department's rooms, teachers, sections, subjects and classes (the server merges only those rows); ask other departments for rooms; mark the department **ready** |
+| **Teacher** | Teacher link (`/teacher`) | See their week; ask for leave |
+| **Student** | Share link or college code (`/my`) | See their section's week; nothing to change. Setup and Timetables aren't in their menu. |
+
+Department saves are merged on the server (`PUT /colleges/{ref}/departments/{dept}/setup`): rows owned by the department are replaced, everything else is kept, codes can't clash with another department's, rows can't be moved out, and anything ignored is reported back in plain words.
 
 ## Hard rules (must never break: these are constraints)
 1. No **teacher** is double-booked in any (day, period).

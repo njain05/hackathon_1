@@ -26,12 +26,14 @@ export default function AppNav({ collegeName }: { collegeName?: string }) {
   const approver = useApproverAccess();
   const teacher = useMemberAccess("teacher");
   const hod = useMemberAccess("hod");
+  const incharge = useMemberAccess("incharge");
   const access = useAccess();
   const links = [
     ...(access?.staff ? STAFF_LINKS : []),
     ...PUBLIC_LINKS,
     ...(teacher ? [{ href: "/teacher", label: "Teacher" }] : []),
     ...(hod ? [{ href: "/hod", label: "HOD" }] : []),
+    ...(incharge || hod ? [{ href: "/department", label: "Department" }] : []),
     ...(admin ? [{ href: "/changes", label: "Changes" }, { href: "/people", label: "People" }] : []),
     ...(admin || approver ? [{ href: "/approvals", label: "Approvals" }] : []),
   ];

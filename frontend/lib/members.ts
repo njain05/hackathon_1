@@ -9,7 +9,7 @@ import { ApiError, call } from "./api";
 import type { AdminAccess } from "./cloud";
 import { readLocal, useLocal, writeLocal } from "./local";
 
-export type Role = "hod" | "teacher";
+export type Role = "hod" | "teacher" | "incharge";
 
 export interface MemberInfo {
   role: Role | "incharge";
@@ -68,7 +68,7 @@ export const makeTeacherLink = (a: AdminAccess, teacherId: string) =>
 // ---------- Links ----------
 
 const origin = () => (typeof window === "undefined" ? "" : window.location.origin);
-const PAGE: Record<Role, string> = { hod: "/hod", teacher: "/teacher" };
+const PAGE: Record<Role, string> = { hod: "/hod", teacher: "/teacher", incharge: "/department" };
 
 export const memberLink = (role: Role, code: string, key: string) => `${origin()}${PAGE[role]}#college=${enc(code)}&key=${enc(key)}`;
 
@@ -117,7 +117,7 @@ export function saveMemberLink(code: string, id: string, link: string) {
   writeLocal(LINKS_KEY, JSON.stringify(all));
 }
 
-const ROLE_NAME: Record<Role, string> = { hod: "an HOD", teacher: "a teacher" };
+const ROLE_NAME: Record<Role, string> = { hod: "an HOD", teacher: "a teacher", incharge: "a timetable in-charge" };
 
 /**
  * Opening a member link (/hod#college=…&key=… or /teacher#…): check it with the

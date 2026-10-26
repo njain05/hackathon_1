@@ -3,6 +3,32 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: Usability pass, open electives, room sharing, fair workload, department roles** (P1 session, user request: "the whole site is very buggy… make this the best")
+  - **Bugs a real person felt**, fixed from a code-verified audit of every screen:
+    - number boxes now let you type, delete and paste (`components/ui/NumberInput.tsx`);
+    - "Periods a day" no longer wipes breaks while typing; breaks have an explicit kind; the start time can be retyped;
+    - students no longer see Setup or Timetables (`lib/access.ts`), and `/setup` tells them where to go;
+    - Start over no longer overwrites the online copy;
+    - the Check step can retry, and Generate errors show under the button;
+    - tables have Undo after delete, "e.g." placeholders and screen-reader errors;
+    - API calls handle 204, and 422 errors name the field;
+    - Timetables warns when the setup changed since generating;
+    - secondary text darkened for WCAG AA on tints;
+    - the menu appears on Home and Setup.
+  - **Open electives**: solver (parallel options, one room each, member sections blocked), pre-checks, independent checker, "Open electives" table on the Subjects step, and one "Open Elective" block per section in the grids.
+  - **Room sharing**: `Room.shared_with` in the solver and checker. A department asks for another's room; the owner HOD approves (`backend/app/departments.py`, `components/department/RoomSharing.tsx`).
+  - **Fair workload**: `max_periods_per_week`, plus a warning such as "Dr. Harpreet Kaur teaches 14 periods a week, while CSE's average is 9".
+  - **Department roles** (on the shared `members.py`):
+    - the HOD appoints a timetable in-charge (`InchargeLink`);
+    - `/department` lets an HOD or in-charge edit only their department, with server-side merge and plain-English notes on anything ignored;
+    - a ready flag and all-department status;
+    - HOD page tools.
+  - **Tested**:
+    - 65 backend tests pass (6 elective/sharing/cap + 5 department tests);
+    - lint, type check and production build pass (13 pages);
+    - in the browser: Periods 8→10 keeps breaks; open electives pasted from Excel → generate → "Open Elective 1" block in CSE-5A with both choices, 0 clashes;
+    - department flow on test college 2QZZXE: HOD approves ECE's request for C-101 → `shared_with: [ECE]`; HOD appoints Prof. Rajesh Kumar; the in-charge sees only CSE rows, edits HK's name and it autosaves; ECE's data is untouched; marked ready.
+  - Not pushed: the user is demoing the live site.
 - **2026-10-26: Leave needs the HOD's approval; teacher, HOD and People pages** (user request)
   - **One shared `members` table** (agreed with the P1 session, so there is a single HOD system):
     - `backend/app/members.py`: id, college, `department_id`, `role` (`hod` / `incharge` / `teacher`), name, `teacher_id`, key hash, `revoked_at`;
