@@ -11,7 +11,7 @@ Update after every completed step. Newest entries at the top of each section.
   - **Download Excel (all timetables)** (`lib/exports.ts`, `ExportButtons`): one workbook with a sheet per section, teacher and room.
   - **Add to my calendar** (`CalendarExport`): an `.ics` file of your own week that repeats weekly, for Google or Apple Calendar.
   - e2e `reports.spec.ts` (6 tests). Checked: tsc, lint, full e2e 12/12.
-  - Waiting on the UX session to mount them (it's editing those files): the Reports link in AppNav, ExportButtons on /timetable, CalendarExport on /my.
+  - Mounted by the UX session in `73039f2`: Reports link (staff, under More), Download Excel next to Print on /timetable, Add to my calendar under the week on /my. Full e2e after the mounts: 12/12 pass; tsc and lint clean; all three checked in the browser.
 - **2026-10-27: P7 Lab batches and short days** (P1 session, `fdbe243` solver, `744270b` screens)
   - A section can have lab batches (e.g. A1:30, A2:30). An assignment marked "Labs in batches" gives each batch its own lab, and batches may run labs at the same time in different labs. The section has no lecture while any batch is in a lab.
   - "Shorter days" in the Week step: any day can have fewer periods (e.g. a 4-period Saturday). The grid shows "No classes after HH:MM" for the rest of that day.
