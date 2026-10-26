@@ -11,6 +11,7 @@ import { entriesFor, type ViewKind } from "@/lib/grid";
 import { useLocal } from "@/lib/local";
 import { useStoredTimetable } from "@/lib/result";
 import type { CollegeData, Entry } from "@/lib/types";
+import ExportButtons from "./ExportButtons";
 import { CheckSummary } from "./QualityPanel";
 import TimetableGrid, { SubjectKey } from "./TimetableGrid";
 
@@ -150,6 +151,7 @@ export default function TimetablePage() {
             <button type="button" className="btn-quiet" onClick={() => print(true)}>
               Print all {noun.toLowerCase()}s
             </button>
+            <ExportButtons data={data} result={result} />
           </div>
         </div>
 

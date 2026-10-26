@@ -13,6 +13,7 @@ import { useLocal, writeLocal } from "@/lib/local";
 import { formatTime } from "@/lib/periods";
 import { useStoredTimetable } from "@/lib/result";
 import type { CollegeData, Entry } from "@/lib/types";
+import CalendarExport from "./CalendarExport";
 import { choices } from "./TimetablePage";
 import TimetableGrid, { nameLookup, SubjectKey } from "./TimetableGrid";
 
@@ -266,7 +267,7 @@ export default function MyTimetable() {
           <div className="flex flex-wrap items-center gap-3 print:hidden">
             <p>
               <span className="text-ink-soft">{activeRole === "section" ? "Your section:" : "Your name:"}</span>{" "}
-              <span className="font-semibold">{options.find((o) => o.id === myId)?.label ?? myId}</span>
+              <span className="font-semibold">{myLabel ?? myId}</span>
             </p>
             <button type="button" className="font-semibold text-navy underline" onClick={() => setPicking(true)}>
               Change
@@ -350,6 +351,7 @@ export default function MyTimetable() {
                 highlightPeriod={periodNow ? Number(periodNow) : undefined}
               />
               <SubjectKey data={data} entries={mine} view={activeRole} />
+              <CalendarExport data={data} entries={mine} view={activeRole} label={myLabel ?? myId} />
             </section>
           </>
         )}

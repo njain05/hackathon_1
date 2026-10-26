@@ -31,7 +31,7 @@ Update after every completed step. Newest entries at the top of each section.
     - Timetables: the Verified box and the Quality panel are one line, "✓ Verified: 0 clashes · Quality score 32 · Details" (`CheckSummary` in QualityPanel.tsx). It opens by itself when there are problems.
     - My timetable: once a section or name is chosen, the picker shrinks to "Your section: CSE-3A · Change", with Print beside it.
   - Checked: lint, build, e2e main-flows + screens (5/5 including the 375px fit check), and in the browser on desktop and phone.
-  - Still to do (waiting on P1's commits): Reports link in AppNav, ExportButtons on /timetable, CalendarExport on /my.
+  - P1's P8 pieces are in place: a staff-only **Reports** link in the top bar, **Download Excel (all timetables)** next to Print on /timetable, and **Add to my calendar** under the week on /my. e2e main-flows + screens + reports: 11/11 pass.
 - **2026-10-27: Short days and lab batches in the daily features** (after P1's P7 solver, `fdbe243`)
   - Every daily feature uses the day's own period count (`settings.periods_on(day)`), so a 4-period Saturday never offers period 5:
     - the helper (free rooms, teacher free periods, hall slots, "period now");

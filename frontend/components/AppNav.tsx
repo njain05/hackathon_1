@@ -37,6 +37,7 @@ export default function AppNav({ collegeName }: { collegeName?: string }) {
     ...(admin ? [{ href: "/changes", label: "Changes" }] : []),
     ...(admin ? [{ href: "/approvals", label: "Approvals" }] : []),
     ...(staff ? [{ href: "/setup", label: "Setup" }] : []),
+    ...(staff ? [{ href: "/reports", label: "Reports" }] : []),
     ...(incharge || hod ? [{ href: "/department", label: "Department" }] : []),
     ...(admin ? [{ href: "/people", label: "People" }] : []),
     { href: "/my", label: "My timetable" },
