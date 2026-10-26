@@ -13,7 +13,7 @@ const UNREACHABLE =
 /** Statuses a sleeping or restarting server (or its proxy) answers with. */
 const NOT_READY = new Set([502, 503, 504]);
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+export async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (!(await ensureAwake())) throw new ApiError(UNREACHABLE);
 
   const send = () =>
@@ -41,7 +41,17 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 422) {
     throw new ApiError("Some entries are in the wrong format. Check the steps marked with a problem.");
   }
-  if (!res.ok) throw new ApiError(`The timetable server had a problem (error ${res.status}). Try again.`);
+  if (!res.ok) {
+    // The server's own plain-English reason (e.g. "No college with the code …"), when it gives one.
+    const detail = await res
+      .json()
+      .then((b: { detail?: unknown }) => b.detail)
+      .catch(() => null);
+    throw new ApiError(
+      typeof detail === "string" ? detail : `The timetable server had a problem (error ${res.status}). Try again.`,
+      { cause: res.status },
+    );
+  }
   return (await res.json()) as T;
 }
 

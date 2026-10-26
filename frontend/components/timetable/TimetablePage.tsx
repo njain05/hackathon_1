@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import AppNav from "@/components/AppNav";
+import PublishBar from "@/components/share/PublishBar";
 import { entriesFor, type ViewKind } from "@/lib/grid";
 import { useStoredTimetable } from "@/lib/result";
 import type { CollegeData, Entry } from "@/lib/types";
@@ -116,6 +117,7 @@ export default function TimetablePage() {
           </div>
         </div>
 
+        <PublishBar stored={stored} />
         <VerifiedBadge result={result} />
         <QualityPanel result={result} />
 

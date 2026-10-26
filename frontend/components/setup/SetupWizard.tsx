@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AdminLinkNotice, CloudSave, useOpenAdminLink } from "@/components/share/CloudSave";
 import { ApiError, getSample } from "@/lib/api";
 import { downloadWorkbook, importWorkbook, readSpreadsheet } from "@/lib/excel";
 import { ensureAwake } from "@/lib/server";
@@ -145,16 +146,24 @@ export default function SetupWizard() {
     void ensureAwake();
   }, []);
 
-  if (!loaded) return <p className="p-8 text-ink-soft">Loading…</p>;
+  // Opened from the admin link (/setup#college=…&key=…): load the college saved online.
+  const opening = useOpenAdminLink(loaded, data !== null, replaceData);
+  const [noticeClosed, setNoticeClosed] = useState(false);
+  const notice = noticeClosed ? null : <AdminLinkNotice state={opening} onClose={() => setNoticeClosed(true)} />;
+
+  if (!loaded || opening.kind === "loading") return <p className="p-8 text-ink-soft">Loading…</p>;
   if (!data)
     return (
-      <TemplatePicker
-        onPick={(d) => {
-          replaceData(d);
-          setReport(null);
-          setStep("week");
-        }}
-      />
+      <>
+        {notice}
+        <TemplatePicker
+          onPick={(d) => {
+            replaceData(d);
+            setReport(null);
+            setStep("week");
+          }}
+        />
+      </>
     );
 
   const index = STEPS.findIndex((s) => s.id === step);
@@ -217,6 +226,9 @@ export default function SetupWizard() {
           Start over
         </button>
       </header>
+
+      {notice}
+      <CloudSave data={data} replaceData={replaceData} />
 
       <Stepper current={step} data={data} onGo={go} />
 

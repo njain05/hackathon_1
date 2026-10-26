@@ -38,6 +38,7 @@ Everything about a college comes from the admin's data. Nothing is hard-coded: n
   - entries (day, 1-based period, section, subject, teacher, room, kind)
   - problems (message, suggestion and the setup `step` to fix it in)
   - stats and the independent checker's report.
+- **Saved college (server)**: `colleges` (name, slug for the share link, 6-letter code, SHA-256 of the admin key), `college_data` (the setup draft as JSON, may be incomplete) and `timetables` (published versions: the CollegeData snapshot + SolveResult). Stored in `backend/app/db.py`, never in the solver.
 - **Booking (later)**: room, date, period range, organiser, purpose, attendees, status (`pending` → `approved` / `rejected`), with an approval chain in stage 2.
 
 ## Works for any college
@@ -105,10 +106,13 @@ The model is built so each of these is an **additive, optional field**: existing
 | **One column definition per table** drives the on-screen table, the Excel/CSV template, file import and paste | They can never disagree. Header aliases ("Room no.", "Initials", "L"/"P") let real admin sheets import as they are. |
 | Excel/CSV import **runs in the browser** (SheetJS from its official CDN; the npm copy is outdated) | Instant, works offline, and the data doesn't leave the device until Generate. |
 | **Bad rows are skipped and listed** (sheet, row, reason, fix); good rows import | One typo shouldn't block a 200-row load sheet. Same code means update, new code means add, so re-importing is safe. |
-| Setup draft saved in **browser storage** until stage 2 adds a database | Nothing is lost on refresh. No login needed for the hackathon. |
+| Setup draft saved in **browser storage**, and once "Save online & share" is pressed, **autosaved to the server** | Nothing is lost on refresh, and the admin can continue on another device. |
 | Pre-generation checks in **two places**: instant browser checks (missing or duplicate entries), then server `/check` (impossible setups, same code as the solver) | Fast feedback while typing, and one source of truth for feasibility rules. |
 | Labs seat the **whole section** (no batches yet) | Simpler for today. Splitting labs into batches (A1/A2) is a stage 2 item. |
-| In-memory or JSON storage for the hackathon, a real DB in stage 2 | Saves time today. The data model is designed so a DB can be added later. |
+| **SQLAlchemy** with `DATABASE_URL`: SQLite locally, **Supabase Postgres** in production | Render's free disk is wiped on restart. Data is stored as JSON blobs, so the model can grow without migrations. |
+| **No login: a secret admin link** (`/setup#college=CODE&key=KEY`) plus a public share link and code | Nothing to sign up for. The key sits in the URL fragment, so it never reaches server logs. Only its hash is stored. Every write needs it in `X-Admin-Key`. |
+| **Publish** is a separate, explicit step, and the server re-runs the clash checker first | Students see only a timetable the admin chose, and never one with clashes. Each publish is a new version. |
+| /my **caches the published timetable** in browser storage | It opens instantly and still works with no internet. |
 | Claude chatbot uses **tool use**, called **from the backend only** | Answers come from real data and real functions, never guesses. The API key is never exposed to the browser. |
 | Chatbot model: **Haiku** (latest) | Fast and cheap enough for a live demo with many judges. Set a spending limit in the Anthropic console. |
 

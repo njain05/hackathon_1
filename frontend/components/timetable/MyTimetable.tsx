@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
+import { CollegeCodeForm, OpenCollegePage } from "@/components/share/OpenCollege";
+import { setViewedCollege, useViewerTimetable } from "@/lib/cloud";
 import { buildRows, entriesFor, timeRange, type Cell, type ViewKind } from "@/lib/grid";
 import { useLocal, writeLocal } from "@/lib/local";
 import { formatTime } from "@/lib/periods";
 import { useStoredTimetable } from "@/lib/result";
 import type { CollegeData, Entry } from "@/lib/types";
-import { choices, EmptyState } from "./TimetablePage";
+import { choices } from "./TimetablePage";
 import TimetableGrid, { nameLookup, SubjectKey } from "./TimetableGrid";
 
 const ME_KEY = "timetable.me.v1";
@@ -146,8 +148,12 @@ function TodayPanel({ data, entries, role, clock }: { data: CollegeData; entries
   );
 }
 
+const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
 export default function MyTimetable() {
-  const stored = useStoredTimetable();
+  const local = useStoredTimetable();
+  const { state: source, refresh } = useViewerTimetable(local);
+  const [changing, setChanging] = useState(false);
   const rawMe = useLocal(ME_KEY);
   const clock = useClock();
   const me = useMemo<Me | null>(() => {
@@ -159,18 +165,16 @@ export default function MyTimetable() {
   }, [rawMe]);
   const [role, setRole] = useState<Me["role"] | null>(null);
 
-  if (stored === undefined || rawMe === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
-  if (stored === null)
+  if (source.kind === "loading" || rawMe === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (source.kind === "none")
     return (
       <>
         <AppNav />
-        <EmptyState title="No timetable yet">
-          Once the timetable in-charge generates the timetable, your classes will appear here.
-        </EmptyState>
+        <OpenCollegePage error={source.error} />
       </>
     );
 
-  const { data, result } = stored;
+  const { data, result } = source.stored;
   const activeRole = role ?? me?.role ?? "section";
   const options = choices(data, activeRole);
   const myId = me && me.role === activeRole && options.some((o) => o.id === me.id) ? me.id : "";
@@ -188,12 +192,57 @@ export default function MyTimetable() {
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold sm:text-3xl">{myLabel ? `My timetable: ${myLabel}` : "My timetable"}</h1>
+          {source.kind === "published" ? (
+            <p className="text-ink-soft">
+              {source.college.name}, college code <span className="font-semibold text-ink">{source.college.code}</span>.
+              Published {when(source.stored.at)}.{" "}
+              <button type="button" className="font-semibold text-navy underline print:hidden" onClick={() => setChanging(true)}>
+                Change college
+              </button>
+            </p>
+          ) : (
+            <p className="text-ink-soft print:hidden">
+              This is the timetable generated in this browser. Students and teachers see it once it is published.{" "}
+              <button type="button" className="font-semibold text-navy underline" onClick={() => setChanging(true)}>
+                Open a college by code
+              </button>
+            </p>
+          )}
+          {source.kind === "published" && source.stale && (
+            <p role="status" className="flex flex-wrap items-center gap-3 rounded-md bg-blush px-3 py-2 print:hidden">
+              <span>
+                <span className="font-semibold">Showing the copy saved on this phone</span> (downloaded {when(source.fetchedAt)}).{" "}
+                {source.error}
+              </span>
+              <button type="button" className="btn-quiet !py-1" onClick={refresh}>
+                Refresh
+              </button>
+            </p>
+          )}
           {clock?.demo && (
             <p className="text-sm text-ink-soft">
               Showing as if it were {clock.day} {formatTime(clock.minutes)} (from the address bar).
             </p>
           )}
         </div>
+
+        {changing && (
+          <section className="rounded-md border border-line bg-paper p-4 print:hidden" aria-label="Open another college">
+            <CollegeCodeForm onCancel={() => setChanging(false)} />
+            {source.kind === "published" && (
+              <button
+                type="button"
+                className="mt-3 text-sm font-semibold text-navy underline"
+                onClick={() => {
+                  setViewedCollege(null);
+                  setChanging(false);
+                }}
+              >
+                Forget {source.college.name} on this device
+              </button>
+            )}
+          </section>
+        )}
 
         <div className="flex flex-wrap items-end gap-4 print:hidden">
           <div role="group" aria-label="I am a" className="flex rounded-md border border-line bg-paper p-1">

@@ -8,12 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel
 
+from app.colleges import router as colleges_router
 from solver import CollegeData, SolveResult, precheck, sample_college, solve
 from solver.models import Problem
 
-load_dotenv()
+load_dotenv()  # before the first request: the database connects lazily, reading DATABASE_URL
 
 app = FastAPI(title="College Timetable API")
+app.include_router(colleges_router)
 
 # Comma-separated list of allowed frontend origins, e.g.
 # "http://localhost:3000,https://your-app.vercel.app"

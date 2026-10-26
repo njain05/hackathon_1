@@ -3,6 +3,41 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: P2 Save and share** (one college, many users, no login)
+  - **Database** (`backend/app/db.py`, SQLAlchemy 2.1 + psycopg 3; nothing in `solver/`):
+    - `DATABASE_URL`: unset means the SQLite file `backend/timetable.db` (git-ignored). In production, Supabase's "Session pooler" URI. `postgres://` and `postgresql://` are rewritten to the psycopg driver.
+    - Tables are created on first use: `colleges` (name, slug, short code, admin key hash), `college_data` (draft JSON, updated_at), `timetables` (data snapshot + SolveResult JSON, version, published_at).
+  - **API** (`backend/app/colleges.py`):
+    - `POST /colleges` → slug, 6-letter code (no 0/O/1/I/L), and an admin key shown once (only its SHA-256 is stored);
+    - public: `GET /colleges/{code or slug}` and `/timetable` (the latest published version);
+    - admin only, with header `X-Admin-Key`: `GET …/admin`, `PUT …/data` (incomplete drafts are fine, 5 MB cap), `POST …/publish`;
+    - publish re-runs the independent clash checker and refuses unsolved or clashing timetables;
+    - errors are plain English (`detail`), and the frontend now shows them.
+  - **Admin flow**:
+    - a "Saved only in this browser → Save online & share" bar in the setup;
+    - the links card: "Save this link, it is your password." with the admin link, the share link and the college code, each with a Copy button;
+    - the draft then autosaves 1.2 s after each change ("Saved online <time>");
+    - the admin link is `/setup#college=CODE&key=KEY`. The key stays in the URL fragment, so it never reaches a server log, and is removed from the address bar once read;
+    - on another device the link loads the saved setup. If this browser's copy differs from the online one and the online one changed since this browser last saved (`timetable.synced.v1`), it asks "Use the online copy / Keep this browser's copy" rather than overwriting;
+    - "Disconnect this browser" sits in the links card.
+  - **Publish**: a bar on `/timetable`: "Only this browser can see this" (link to setup), then "Publish timetable", then "Live for everyone, version N" with the share link and code. It also says when a different version is live.
+  - **/my**:
+    - the share link `/c/<slug or code>` remembers the college on this device and opens /my;
+    - with nothing opened, /my asks for the college code (or a pasted share link);
+    - the published timetable is cached in browser storage (`timetable.published.v1`), shown at once and refreshed when back online or reopened;
+    - if the server can't be reached it says "Showing the copy saved on this phone";
+    - "Change college" and "Forget … on this device" are available;
+    - in the admin's own browser with no college opened, /my still shows the locally generated timetable.
+  - **Tests**: 7 new pytest tests, 34 in total, all pass. They cover create → save → publish → read as public (by code, lower case and slug), versions, a wrong, missing or other college's key rejected, the public link can't edit or see the key, clashing and unsolved timetables refused, unknown code 404, and URL normalising.
+  - **Tested in the browser**:
+    - sample → Save online → autosave rename reached the server → Generate → Publish (v1);
+    - cleared storage, opened the share link at 375px: student and teacher views with Today, no sideways scroll;
+    - a wrong code shows a friendly error;
+    - the admin link in a cleared browser loads the setup and strips the key from the URL;
+    - a changed local copy triggers the conflict prompt, and a quick close then reload uploads silently;
+    - backend stopped: /my still opens the cached copy;
+    - lint, type check and production build (with a remote API URL) pass.
+  - Worked alongside the P1 session in the same folder: only my files and hunks were staged.
 - **2026-10-26: P1 Deploy ready** (config only, no feature changes)
   - `render.yaml` (Blueprint):
     - backend service, free, Singapore, `rootDir: backend`;
@@ -128,10 +163,14 @@ Update after every completed step. Newest entries at the top of each section.
 - (none)
 
 ## Next
-1. Simple hall booking (free slots only, one-click approve), then an "Ask the timetable" box.
-2. Deploy: backend on Render (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`), frontend on Vercel with `NEXT_PUBLIC_API_URL`.
+1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
+2. P3: hall booking with digital approval (see prompts.md).
 
 ## Problems & fixes
+- The project folder was moved, so `backend/.venv/bin/uvicorn` and `pip` point at the old path ("bad interpreter"). `.claude/launch.json` now runs `backend/.venv/bin/python -m uvicorn`; use `.venv/bin/python -m pip` too, or recreate the venv.
+- `next typegen` is needed after adding a route folder (e.g. `app/c/[code]`), or `PageProps<"/c/[code]">` fails the type check until the dev server regenerates types.
+- A production build can't use a symlinked `node_modules` in a scratch copy (Turbopack refuses files outside the root). Use `cp -cR node_modules` (an APFS clone) instead.
+- When the browser pane is hidden, timers are throttled, so the "waking up" wait can run much longer than 90 s in tests. The cached /my copy still shows meanwhile.
 - Tailwind v4 only outputs `@theme` variables that a utility class uses. The subject colours are read with `var()` from inline styles, so they were dropped. Fixed by moving them to plain `:root` variables.
 - Turbopack again kept serving stale CSS after a `globals.css` edit, and a dev-server restart fixed it. **If a CSS change doesn't show up, restart `npm run dev`.**
 - The print preview itself wasn't checked here (the browser's print dialog can't be opened from the test tools). The print markup and page breaks were checked in the page instead. Do a real print preview before the demo.
