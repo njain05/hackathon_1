@@ -3,6 +3,14 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: HOD approves department data, Dean generates** (P1 session, `330a997`, pushed and live)
+  - The in-charge prepares the department's data and presses **Send to the HOD for approval** (/department, tab "Check & send to HOD"). The HOD **approves** it or **sends it back with a note** saying what to fix (tab "Check & approve"). The HOD can also approve a draft directly when there is no in-charge.
+  - Changing an approved (or sent) department's rows puts it back to draft, and the page says so. Saves with no real change, or changes to other departments' rows (which are ignored), don't. The Dean's own changes don't undo an approval.
+  - **Generate in the Dean's setup waits** for every department that has an HOD (departments without one don't hold anything up), listing each one's state, with a "Generate anyway" tick box. It also warns when a department saved newer data online than this browser has.
+  - **Privacy**: an HOD or in-charge sees every department's progress, but only their own department's HOD, in-charge, notes and "by". The Dean sees everyone.
+  - New table `department_reviews` (the old `department_status` is left unused), so the live database needed no ALTER. `POST .../submit` and `POST .../review` replace `PUT .../ready`.
+  - "Dean" instead of "admin" in the department pages and their server messages.
+  - Tests: 3 new backend (89 total), e2e `departments.spec.ts` (4; 16 in all). Checked live: the new routes on Render and the new pages on Vercel.
 - **2026-10-27: Roles end to end (user's model): Dean → HODs → in-charge; teachers; students; clubs** (my part; P1 did the timetable approval steps, the UX session the menus)
   - **Rooms**:
     - a teacher books **any free room** (halls first, then classrooms and labs) from their teacher page or /book with their link on the device; it goes to **their HOD, then the Dean**;
