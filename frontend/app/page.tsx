@@ -10,7 +10,7 @@ export default function Home() {
       <div className="flex flex-col gap-3">
         <h1 className="text-4xl font-bold sm:text-5xl">College Timetable</h1>
         <p className="max-w-xl text-lg text-ink-soft">
-          One place for the whole college. Admins build a clash-free timetable, teachers and students see their own
+          One place for the whole college. The Dean’s office builds a clash-free timetable, teachers and students see their own
           week, and organisers book halls without paper letters.
         </p>
       </div>

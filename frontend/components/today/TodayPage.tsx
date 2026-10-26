@@ -11,7 +11,7 @@ import { type AdminCollege, getAdminCollege, useAdminAccess } from "@/lib/cloud"
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
 interface Task {
-  /** Needs the admin now (shown first, in red) or just for information. */
+  /** Needs the Dean now (shown first, in red) or just for information. */
   urgent: boolean;
   title: string;
   text: string;
@@ -28,7 +28,7 @@ interface Loaded {
   at: Date;
 }
 
-/** Admin home: what needs doing today, each with one button that goes there. */
+/** The Dean's home: what needs doing today, each with one button that goes there. */
 export default function TodayPage() {
   const admin = useAdminAccess();
   const [data, setData] = useState<Loaded | null>(null);
@@ -65,7 +65,7 @@ export default function TodayPage() {
         <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-4 px-4 py-16">
           <h1 className="text-3xl font-bold">Today</h1>
           <p className="text-lg text-ink-soft">
-            This page is for the timetable admin. Open your admin link on this device, or set up your college first.
+            This page is for the Dean. Open the Dean’s link on this device, or set up your college first.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link href="/setup" className="btn-primary w-fit">

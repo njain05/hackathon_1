@@ -22,6 +22,9 @@ Update after every completed step. Newest entries at the top of each section.
   - README rewritten with screenshots (`docs/screenshots/`, refresh with `UPDATE_SCREENSHOTS=1 npm run e2e`), architecture, 5 admin steps, limitations.
   - Secrets scan of the code and git history: clean. The only matches are made-up test passwords in `backend/tests/test_colleges.py` and `backend/demo_checks.py`.
   - Still to do for P10: make the repo public (the user said "Not yet"), deploy, test the live link on a phone, commit "submission".
+- **2026-10-27: Role wording on my pages** (UX session, following the user's role model: Dean → HODs → in-charges, teachers, students, clubs)
+  - Visible "admin" is now "Dean" on Home and /today. Home shows an **HOD** or **Department in-charge** card only on a device holding that private link, so nobody sees roles they don't have.
+  - The top bar already showed only the pages for the links a device holds. The Department page never sets the setup draft, so HODs and in-charges don't see Setup, Timetables or Reports.
 - **2026-10-27: Simpler navigation, "Who are you?" Home and an admin Today page** (UX session)
   - **Top bar (`components/AppNav.tsx`)**: links in order of use for whoever holds this device. Wide screens show 4 links and put the rest under **More ▾**. Below 768px a single **☰ Menu** button replaces the rows of links. Menus close on Escape, an outside click, or after navigating. Every access-gated link keeps its old condition (Teacher, HOD, Department, Changes, People, Approvals; Setup and Timetables staff-only). The college name falls back to the admin link's name.
   - **Home (`components/home/RolePicker.tsx`)**: four cards: Student → /my, Teacher → /teacher (with a teacher link) or /my, Event organiser → /book, Timetable admin → /today (with the admin link) or /setup.

@@ -11,10 +11,15 @@ interface Role {
   text: string;
 }
 
-/** "Who are you?": one big card per kind of person, so nobody has to read the whole menu. */
+/**
+ * "Who are you?": one big card per kind of person, so nobody has to read the whole menu.
+ * HOD and in-charge cards appear only on a device holding that private link.
+ */
 export default function RolePicker() {
   const admin = useAdminAccess();
   const teacher = useMemberAccess("teacher");
+  const hod = useMemberAccess("hod");
+  const incharge = useMemberAccess("incharge");
   const access = useAccess();
 
   const roles: Role[] = [
@@ -24,10 +29,16 @@ export default function RolePicker() {
       title: "Teacher",
       text: teacher ? "Your classes, changes and leave." : "Your classes for today and the week.",
     },
+    ...(hod
+      ? [{ href: "/hod", title: `HOD, ${hod.department_name}`, text: "Leave, cover and hall requests from your department." }]
+      : []),
+    ...(incharge && !hod
+      ? [{ href: "/department", title: "Department in-charge", text: "Your department's part of the setup." }]
+      : []),
     { href: "/book", title: "Event organiser", text: "Book a seminar hall or auditorium and track the approval." },
     {
       href: admin ? "/today" : "/setup",
-      title: "Timetable admin",
+      title: "Dean",
       text: admin
         ? "What needs doing today: cover, approvals, publishing."
         : access?.staff
