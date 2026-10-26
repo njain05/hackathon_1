@@ -311,7 +311,7 @@ function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
       <input
         aria-label={label}
         aria-invalid={!!error}
-        type={col.kind === "number" ? "number" : "text"}
+        type="text"
         inputMode={col.kind === "number" ? "numeric" : undefined}
         placeholder={col.placeholder}
         value={draft}

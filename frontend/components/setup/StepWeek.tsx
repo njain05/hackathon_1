@@ -3,6 +3,7 @@
 import { WEEK_DAYS } from "@/lib/templates";
 import { departmentsTable } from "@/lib/tables";
 import type { Break, CollegeData, Settings } from "@/lib/types";
+import NumberInput from "@/components/ui/NumberInput";
 import DataTable from "./DataTable";
 import DayPreview from "./DayPreview";
 
@@ -57,16 +58,13 @@ function BreakControl({ id, label, noneLabel, current, taken, periods, make, onC
         {current && (
           <>
             <span className="hint">for</span>
-            <input
+            <NumberInput
               aria-label={`${label} length in minutes`}
-              type="number"
               min={1}
               max={240}
+              unit="minutes"
               value={current.minutes}
-              onChange={(e) => {
-                const n = Math.round(Number(e.target.value));
-                if (n >= 1 && n <= 240) onChange({ ...current, minutes: n });
-              }}
+              onChange={(n) => onChange({ ...current, minutes: n })}
               className="field w-20"
             />
             <span className="hint">minutes</span>
@@ -111,19 +109,7 @@ function NumberField({
         {label}
       </label>
       <div className="flex items-center gap-2">
-        <input
-          id={id}
-          type="number"
-          inputMode="numeric"
-          min={min}
-          max={max}
-          value={value}
-          onChange={(e) => {
-            const n = Math.round(Number(e.target.value));
-            if (Number.isFinite(n) && n >= min && n <= max) onChange(n);
-          }}
-          className="field w-24"
-        />
+        <NumberInput id={id} min={min} max={max} unit={suffix} value={value} onChange={onChange} className="field w-24" />
         {suffix && <span className="hint">{suffix}</span>}
       </div>
     </div>
@@ -300,16 +286,13 @@ export default function StepWeek({ data, onChange }: Props) {
                       </option>
                     ))}
                   </select>
-                  <input
-                    aria-label="Break length in minutes"
-                    type="number"
+                  <NumberInput
+                    aria-label={`${b.name || "Break"} length in minutes`}
                     min={1}
                     max={240}
+                    unit="minutes"
                     value={b.minutes}
-                    onChange={(e) => {
-                      const n = Math.round(Number(e.target.value));
-                      if (n >= 1 && n <= 240) update({ minutes: n });
-                    }}
+                    onChange={(n) => update({ minutes: n })}
                     className="field w-20"
                   />
                   <span className="hint">min</span>
@@ -355,16 +338,12 @@ export default function StepWeek({ data, onChange }: Props) {
                 {s.period_lengths.map((m, i) => (
                   <label key={i} className="flex flex-col gap-1 text-sm">
                     Period {i + 1}
-                    <input
-                      type="number"
+                    <NumberInput
                       min={10}
                       max={240}
+                      unit="minutes"
                       value={m}
-                      onChange={(e) => {
-                        const n = Math.round(Number(e.target.value));
-                        if (n >= 10 && n <= 240)
-                          setSettings({ period_lengths: s.period_lengths!.map((x, j) => (j === i ? n : x)) });
-                      }}
+                      onChange={(n) => setSettings({ period_lengths: s.period_lengths!.map((x, j) => (j === i ? n : x)) })}
                       className="field w-20"
                     />
                   </label>
