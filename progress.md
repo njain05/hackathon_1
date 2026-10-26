@@ -199,6 +199,18 @@ Update after every completed step. Newest entries at the top of each section.
   - `.claude/launch.json` starts both dev servers.
   - Git initialised with the first commit.
 
+## Done (continued)
+- **2026-10-26: Demo test cases**
+  - **`backend/demo_checks.py`**: 22 numbered test cases (TC01–TC22) that print PASS/FAIL with real numbers as evidence and a summary at the end. Uses a temporary SQLite database (`DATABASE_URL` overridden before any import), so saved colleges are never touched.
+    - **Solver (TC01–TC07)**: sample college solves with 0 clashes; both independent checker and direct recount agree; every assignment gets exact weekly hours; labs are consecutive 2-period blocks in the right lab room and never across lunch; room capacity / dept rooms / event halls never used for classes; quality score in plain words; teacher unavailable times respected; 6-day week (Mon–Sat) and different day shape both solve correctly.
+    - **Infeasibility (TC08–TC10)**: no computer labs → `no_room` message; section of 200 → `no_room` message; teacher overload → `teacher_overload` message naming the teacher.
+    - **Broken data (TC11)**: unknown teacher + bad lab hours → status `invalid` with both problems reported.
+    - **Checker (TC12)**: planted duplicate entry (same teacher, same slot) → checker returns ok=False with `teacher_clash`.
+    - **Colleges API (TC13–TC17)**: save → publish → read by code/lowercase/slug → version 2; wrong/missing admin key → 403; DELETE → 405; clashing timetable → 400; unsolved → 400; unreachable DB → 503 without leaking the password; 90 tracked files scanned with no `sk-ant-*` secrets.
+    - **Hall booking (TC18–TC22)**: availability shows only free periods; overlap refused with 409; capacity check; HOD → Dean chain (Dean blocked before HOD); reject and cancel both free the slot.
+  - **`docs/DEMO_TESTCASES.md`**: how to run (`demo_checks.py` and `pytest`), Part A scripted table (22 cases, judging criterion per case), Part B live in the browser (setup → generate → views → My timetable with `?now=Monday 10:15` → share link → offline copy → hall booking), Part C on a phone (375 px), honest limits, and 3 known issues.
+  - All 22 demo cases pass. All 44 pytest tests pass.
+
 ## In progress
 - (none)
 
