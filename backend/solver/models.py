@@ -48,6 +48,14 @@ class Settings(BaseModel):
         None, description="Optional minutes for each period, if they differ"
     )
     breaks: list[Break] = Field(default_factory=list)
+    periods_by_day: dict[str, int] = Field(
+        default_factory=dict,
+        description="Optional shorter days, e.g. {'Saturday': 4}. Other days have periods_per_day.",
+    )
+
+    def periods_on(self, day: str) -> int:
+        """Teaching periods on this day (a short day has fewer)."""
+        return self.periods_by_day.get(day, self.periods_per_day)
 
     @model_validator(mode="after")
     def _check(self) -> "Settings":
@@ -60,6 +68,11 @@ class Settings(BaseModel):
             raise ValueError("A break must come before the last period of the day")
         if self.period_lengths is not None and len(self.period_lengths) != self.periods_per_day:
             raise ValueError("period_lengths must have one entry per period")
+        for day, n in self.periods_by_day.items():
+            if day not in self.days:
+                raise ValueError(f"periods_by_day names {day}, which isn't a working day")
+            if not 1 <= n <= self.periods_per_day:
+                raise ValueError(f"{day} must have between 1 and {self.periods_per_day} periods")
         return self
 
 
@@ -68,11 +81,21 @@ class Department(BaseModel):
     name: str
 
 
+class Batch(BaseModel):
+    """A group of a section's students that does labs on its own (e.g. A1, A2)."""
+
+    id: str
+    strength: int = Field(ge=1)
+
+
 class Section(BaseModel):
     id: str
     name: str
     department_id: str
     strength: int = Field(ge=1, description="Number of students")
+    batches: list[Batch] = Field(
+        default_factory=list, description="Optional lab batches; used by assignments with lab_by_batch"
+    )
 
 
 class Subject(BaseModel):
@@ -109,6 +132,9 @@ class Assignment(BaseModel):
     subject_id: str
     teacher_id: str
     lab_teacher_id: str | None = Field(None, description="Defaults to teacher_id")
+    lab_by_batch: bool = Field(
+        False, description="Each of the section's batches gets its own lab sessions (batches may run labs in parallel)"
+    )
 
 
 class Room(BaseModel):
@@ -176,6 +202,7 @@ class Entry(BaseModel):
     teacher_id: str
     room_id: str
     kind: EntryKind
+    batch: str | None = Field(None, description="For a batch lab: which batch of the section")
     elective_group: str | None = Field(
         None, description="For kind 'elective': the group id. section_id is then the group id too."
     )

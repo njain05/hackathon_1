@@ -281,3 +281,107 @@ def test_shared_room_is_allowed_for_the_department_it_was_shared_with() -> None:
     assert "room_department" not in {v.kind for v in check_timetable(data, [ok]).violations}
     data.rooms[0].shared_with = []
     assert "room_department" in {v.kind for v in check_timetable(data, [ok]).violations}
+
+
+# ---------- Lab batches and short days ----------
+
+from solver.models import Batch  # noqa: E402
+
+
+def _batch_college(periods: int, lecture: bool = False) -> CollegeData:
+    """One day, one section split into batches A1/A2, two batched lab subjects with different teachers."""
+    subjects = [
+        Subject(id="DS", code="DS", name="Data Structures", department_id="d", lecture_hours=0, lab_hours=2),
+        Subject(id="DB", code="DB", name="Databases", department_id="d", lecture_hours=0, lab_hours=2),
+    ]
+    assignments = [
+        Assignment(section_id="S", subject_id="DS", teacher_id="T1", lab_by_batch=True),
+        Assignment(section_id="S", subject_id="DB", teacher_id="T2", lab_by_batch=True),
+    ]
+    if lecture:
+        subjects.append(Subject(id="MA", code="MA", name="Maths", department_id="d", lecture_hours=1))
+        assignments.append(Assignment(section_id="S", subject_id="MA", teacher_id="T3"))
+    return CollegeData(
+        settings=Settings(days=["Mon"], periods_per_day=periods),
+        departments=[Department(id="d", name="Dept")],
+        sections=[Section(id="S", name="CSE-3A", department_id="d", strength=60,
+                          batches=[Batch(id="A1", strength=30), Batch(id="A2", strength=30)])],
+        subjects=subjects,
+        teachers=[Teacher(id=t, name=t, department_id="d") for t in ("T1", "T2", "T3")],
+        assignments=assignments,
+        rooms=[Room(id="L1", name="Lab 1", type="lab", capacity=30), Room(id="L2", name="Lab 2", type="lab", capacity=30),
+               Room(id="C1", name="Room 1", type="classroom", capacity=60)],
+    )
+
+
+def test_batch_labs_run_in_parallel() -> None:
+    """4 periods, each batch needs 4 lab periods: only possible if A1 and A2 are in labs at the same time."""
+    result = solve(_batch_college(periods=4))
+    assert result.status == "solved", result.problems
+    assert result.check is not None and result.check.ok, result.check
+    by_slot: dict[int, set[str | None]] = {}
+    for e in result.entries:
+        by_slot.setdefault(e.period, set()).add(e.batch)
+    assert all(b == {"A1", "A2"} for b in by_slot.values())  # both batches busy every period
+    # Each batch did both labs, in rooms that only seat a batch (30 < 60).
+    for batch in ("A1", "A2"):
+        assert {e.subject_id for e in result.entries if e.batch == batch} == {"DS", "DB"}
+
+
+def test_batch_labs_never_share_a_period_with_a_lecture() -> None:
+    result = solve(_batch_college(periods=5, lecture=True))
+    assert result.status == "solved", result.problems
+    assert result.check is not None and result.check.ok
+    lecture = next(e for e in result.entries if e.kind == "lecture")
+    assert not [e for e in result.entries if e.kind == "lab" and e.period == lecture.period]
+
+
+def test_whole_section_lab_needs_a_big_lab_but_batches_fit_small_ones() -> None:
+    data = _batch_college(periods=4)
+    for a in data.assignments:
+        a.lab_by_batch = False
+    result = solve(data)
+    assert result.status == "infeasible"
+    assert any(p.kind == "no_room" and "lab batches" in p.suggestion for p in result.problems)
+
+
+def test_labs_in_batches_need_batches() -> None:
+    data = _batch_college(periods=4)
+    data.sections[0].batches = []
+    result = solve(data)
+    assert result.status == "invalid"
+    assert any("no batches" in p.message for p in result.problems)
+
+
+def test_checker_allows_parallel_batches_but_not_a_lecture_alongside() -> None:
+    data = _batch_college(periods=5, lecture=True)
+    def lab(batch: str, sub: str, t: str, room: str, p: int) -> Entry:
+        return Entry(day="Mon", period=p, section_id="S", subject_id=sub, teacher_id=t, room_id=room, kind="lab", batch=batch)
+    parallel = [lab("A1", "DS", "T1", "L1", 1), lab("A2", "DB", "T2", "L2", 1)]
+    assert not check_timetable(data, parallel).clashes
+    with_lecture = [*parallel, Entry(day="Mon", period=1, section_id="S", subject_id="MA", teacher_id="T3", room_id="C1", kind="lecture")]
+    assert {c.kind for c in check_timetable(data, with_lecture).clashes} == {"section_clash"}
+    same_batch_twice = [lab("A1", "DS", "T1", "L1", 1), lab("A1", "DB", "T2", "L2", 1)]
+    assert {c.kind for c in check_timetable(data, same_batch_twice).clashes} == {"section_clash"}
+
+
+def test_short_saturday_is_respected() -> None:
+    data = sample_college()
+    data.settings.days = [*data.settings.days, "Saturday"]
+    data.settings.periods_by_day = {"Saturday": 3}
+    result = solve(data)
+    assert result.status == "solved", result.problems
+    assert result.check is not None and result.check.ok
+    saturday = [e.period for e in result.entries if e.day == "Saturday"]
+    assert saturday and max(saturday) <= 3
+    # The checker flags anything placed after a short day's last period.
+    late = result.entries[0].model_copy(update={"day": "Saturday", "period": 6})
+    assert "bad_slot" in {v.kind for v in check_timetable(data, [late]).violations}
+
+
+def test_short_day_must_be_a_working_day_with_a_sensible_length() -> None:
+    import pydantic
+    with pytest.raises(pydantic.ValidationError):
+        Settings(days=["Mon"], periods_per_day=7, periods_by_day={"Sunday": 4})
+    with pytest.raises(pydantic.ValidationError):
+        Settings(days=["Mon"], periods_per_day=7, periods_by_day={"Mon": 9})

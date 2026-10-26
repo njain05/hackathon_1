@@ -8,7 +8,7 @@ Each problem names the setup `step` where it can be fixed.
 
 from collections import Counter, defaultdict
 
-from .common import Index, elective_rooms, lab_rooms, lab_segments, lab_teacher, lecture_rooms
+from .common import Index, batches_for, elective_rooms, lab_rooms, lab_segments, lab_teacher, lecture_rooms
 from .models import CollegeData, Problem, Room
 
 
@@ -40,6 +40,8 @@ def validate_data(data: CollegeData) -> list[Problem]:
     for sec in data.sections:
         if sec.department_id not in idx.departments:
             bad("sections", f'Section {sec.name} belongs to unknown department "{sec.department_id}".')
+        for d in _dupes([b.id for b in sec.batches]):
+            bad("sections", f'{sec.name} has two batches called "{d}".', "Give each batch a different name, e.g. A1 and A2.")
 
     longest_lab_run = max(len(seg) for seg in lab_segments(s))
     for sub in data.subjects:
@@ -89,6 +91,10 @@ def validate_data(data: CollegeData) -> list[Problem]:
         for tid in {a.teacher_id, lab_teacher(a)}:
             if tid not in idx.teachers:
                 bad("subjects", f'The class "{where}" uses unknown teacher "{tid}".')
+        sec = idx.sections.get(a.section_id)
+        if a.lab_by_batch and sec is not None and not sec.batches:
+            bad("subjects", f'"{where}" has labs in batches, but {sec.name} has no batches.',
+                "Add batches in Sections (Advanced options), or turn off labs in batches for this class.")
         if (a.section_id, a.subject_id) in pairs:
             bad("subjects", f'The class "{where}" is listed twice.',
                 "Keep one row per subject per section.")
@@ -129,7 +135,8 @@ def teacher_capacity(data: CollegeData, teacher_id: str) -> int:
         blocked[slot.day].add(slot.period)
     total = 0
     for day in s.days:
-        free = s.periods_per_day - len({p for p in blocked[day] if 1 <= p <= s.periods_per_day})
+        n = s.periods_on(day)
+        free = n - len({p for p in blocked[day] if 1 <= p <= n})
         total += min(free, t.max_periods_per_day) if t.max_periods_per_day else free
     if t.max_periods_per_week is not None:
         total = min(total, t.max_periods_per_week)
@@ -140,7 +147,7 @@ def find_shortages(data: CollegeData) -> list[Problem]:
     """Necessary conditions. If any fails, no timetable can exist. Assumes valid data."""
     idx = Index(data)
     s = data.settings
-    slots = len(s.days) * s.periods_per_day
+    slots = sum(s.periods_on(day) for day in s.days)
     problems: list[Problem] = []
 
     section_need: dict[str, int] = defaultdict(int)
@@ -151,9 +158,12 @@ def find_shortages(data: CollegeData) -> list[Problem]:
 
     for a in data.assignments:
         sec, sub = idx.sections[a.section_id], idx.subjects[a.subject_id]
+        groups = batches_for(a, sec)
+        # Batches can do their labs at the same time, so the section needs the lab hours once,
+        # but the lab teacher and the labs need them once per batch.
         section_need[sec.id] += sub.lecture_hours + sub.lab_hours
         teacher_need[a.teacher_id] += sub.lecture_hours
-        teacher_need[lab_teacher(a)] += sub.lab_hours
+        teacher_need[lab_teacher(a)] += sub.lab_hours * len(groups)
 
         if sub.lecture_hours:
             rooms = lecture_rooms(data, sec)
@@ -166,17 +176,18 @@ def find_shortages(data: CollegeData) -> list[Problem]:
                 ))
             lecture_demand[frozenset(r.id for r in rooms)] += sub.lecture_hours
         if sub.lab_hours:
-            rooms = lab_rooms(data, sec, sub)
-            if not rooms:
-                kind = idx.room_types[sub.lab_room_type].name.lower() if sub.lab_room_type else "lab"
-                problems.append(Problem(
-                    kind="no_room", step="rooms",
-                    message=f"No {kind} room fits {sub.name} labs for {sec.name} "
-                    f"({sec.strength} students).",
-                    suggestion="Add a suitable lab, raise a lab's capacity, or change the "
-                    "subject's lab room type.",
-                ))
-            lab_demand[frozenset(r.id for r in rooms)] += sub.lab_hours
+            for batch, strength in groups:
+                rooms = lab_rooms(data, sec, sub, strength)
+                if not rooms:
+                    kind = idx.room_types[sub.lab_room_type].name.lower() if sub.lab_room_type else "lab"
+                    who = f"batch {batch} of {sec.name}" if batch else sec.name
+                    problems.append(Problem(
+                        kind="no_room", step="rooms",
+                        message=f"No {kind} room fits {sub.name} labs for {who} ({strength} students).",
+                        suggestion="Add a suitable lab, raise a lab's capacity, split the section into "
+                        "lab batches (Sections → Advanced options), or change the subject's lab room type.",
+                    ))
+                lab_demand[frozenset(r.id for r in rooms)] += sub.lab_hours
 
     for g in data.elective_groups:
         for sid in g.section_ids:

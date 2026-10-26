@@ -42,11 +42,11 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
     by_teacher: dict[tuple[str, str, int], list[Entry]] = defaultdict(list)
     by_section: dict[tuple[str, str, int], list[Entry]] = defaultdict(list)
     by_room: dict[tuple[str, str, int], list[Entry]] = defaultdict(list)
-    hours: Counter[tuple[str, str, str]] = Counter()
-    lab_periods: dict[tuple[str, str, str], list[tuple[int, str]]] = defaultdict(list)
+    hours: Counter[tuple[str, str, str, str]] = Counter()  # (section, subject, kind, batch or "")
+    lab_periods: dict[tuple[str, str, str, str], list[tuple[int, str]]] = defaultdict(list)
 
     for e in entries:
-        if e.day not in s.days or not 1 <= e.period <= s.periods_per_day:
+        if e.day not in s.days or not 1 <= e.period <= s.periods_on(e.day):
             violation("bad_slot", (e.day, str(e.period)), f"{e.day} period {e.period} is not a teaching period.", e)
             continue
         if e.kind == "elective":
@@ -105,11 +105,19 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
         by_teacher[e.teacher_id, e.day, e.period].append(e)
         by_section[e.section_id, e.day, e.period].append(e)
         by_room[e.room_id, e.day, e.period].append(e)
-        hours[e.section_id, e.subject_id, e.kind] += 1
+        hours[e.section_id, e.subject_id, e.kind, e.batch or ""] += 1
 
-        if room.capacity < sec.strength:
-            violation("capacity", (room.id, sec.id),
-                      f"{room.name} seats {room.capacity}, but {sec.name} has {sec.strength} students.", e)
+        # A batch lab only has to seat its batch.
+        batch = next((b for b in sec.batches if b.id == e.batch), None) if e.batch else None
+        a_for = assigned.get((e.section_id, e.subject_id))
+        if e.batch and (batch is None or e.kind != "lab" or a_for is None or not a_for.lab_by_batch):
+            violation("bad_batch", (sec.id, sub.id, e.batch),
+                      f"{sub.name} for {sec.name} is listed for batch {e.batch}, which isn't one of its lab batches.", e)
+        need = batch.strength if batch else sec.strength
+        who = f"batch {batch.id} of {sec.name}" if batch else sec.name
+        if room.capacity < need:
+            violation("capacity", (room.id, sec.id, e.batch or ""),
+                      f"{room.name} seats {room.capacity}, but {who} has {need} students.", e)
         if not may_use(room.id, sec.department_id):
             violation("room_department", (room.id, sec.id),
                       f"{room.name} is reserved for another department, but {sec.name} uses it.", e)
@@ -121,7 +129,7 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
                 violation("lab_room", (room.id, sub.id), f"{sub.name} lab is in {room.name}, which is not a lab.", e)
             elif sub.lab_room_type is not None and room.type != sub.lab_room_type:
                 violation("lab_room", (room.id, sub.id), f"{sub.name} lab is in {room.name}, which is the wrong kind of lab.", e)
-            lab_periods[e.section_id, e.subject_id, e.day].append((e.period, e.room_id))
+            lab_periods[e.section_id, e.subject_id, e.day, e.batch or ""].append((e.period, e.room_id))
         elif room_use.get(room.type) != "lecture":
             violation("lecture_room", (room.id, sub.id), f"{sub.name} lecture is in {room.name}, which is not a classroom.", e)
 
@@ -150,7 +158,9 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
             clashes.append(Issue(kind="teacher_clash", day=day, period=p,
                                  message=f"{teachers[tid].name} has {len(es)} classes on {day} period {p} ({names(es, 'section')})."))
     for (sid, day, p), es in by_section.items():
-        if len(es) > 1:
+        # Different batches of a section may be in different labs at once; anything else is a clash.
+        parallel_batches = all(e.batch and e.kind == "lab" for e in es) and len({e.batch for e in es}) == len(es)
+        if len(es) > 1 and not parallel_batches:
             clashes.append(Issue(kind="section_clash", day=day, period=p,
                                  message=f"{sections[sid].name} has {len(es)} classes on {day} period {p} ({names(es, 'subject')})."))
     for (rid, day, p), es in by_room.items():
@@ -183,15 +193,18 @@ def check_timetable(data: CollegeData, entries: list[Entry]) -> CheckReport:
         if sid not in sections or subid not in subjects:
             continue
         sub = subjects[subid]
-        for kind, need in (("lecture", sub.lecture_hours), ("lab", sub.lab_hours)):
-            got = hours[sid, subid, kind]
+        sec = sections[sid]
+        groups = [b.id for b in sec.batches] if a.lab_by_batch and sec.batches else [""]
+        checks = [("lecture", "", sub.lecture_hours)] + [("lab", g, sub.lab_hours) for g in groups]
+        for kind, g, need in checks:
+            got = hours[sid, subid, kind, g]
             if got != need:
-                violation("hours", (sid, subid, kind),
-                          f"{sections[sid].name} has {got} {kind} periods of {sub.name}, needs {need}.")
+                who = f"Batch {g} of {sec.name}" if g else sec.name
+                violation("hours", (sid, subid, kind, g), f"{who} has {got} {kind} periods of {sub.name}, needs {need}.")
 
     # ---- Labs are blocks of consecutive periods in one room, not crossing a break ----
     lab_cuts = {b.after_period for b in s.breaks if not b.labs_continue}
-    for (sid, subid, day), slots in lab_periods.items():
+    for (sid, subid, day, _batch), slots in lab_periods.items():
         block = subjects[subid].lab_block_length
         slots.sort()
         runs: list[int] = []

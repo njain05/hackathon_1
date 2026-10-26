@@ -21,9 +21,11 @@ def rest_segments(settings: Settings) -> list[range]:
     return _runs(settings, {b.after_period for b in settings.breaks})
 
 
-def lab_starts(settings: Settings, block: int) -> list[int]:
-    """0-based periods where a lab block of this length can start without crossing a break or day end."""
-    return [s for seg in lab_segments(settings) for s in seg if s + block <= seg.stop]
+def lab_starts(settings: Settings, block: int, day_periods: int | None = None) -> list[int]:
+    """0-based periods where a lab block of this length can start without crossing a break or
+    the end of the day (`day_periods` for a short day)."""
+    end = settings.periods_per_day if day_periods is None else day_periods
+    return [s for seg in lab_segments(settings) for s in seg if s + block <= min(seg.stop, end)]
 
 
 def room_uses(data: CollegeData) -> dict[str, str]:
@@ -36,8 +38,10 @@ def department_may_use(room: Room, department_id: str) -> bool:
     return room.department_id in (None, department_id) or department_id in room.shared_with
 
 
-def room_allowed_for(room: Room, section: Section) -> bool:
-    return room.capacity >= section.strength and department_may_use(room, section.department_id)
+def room_allowed_for(room: Room, section: Section, strength: int | None = None) -> bool:
+    """`strength` overrides the section's (a lab batch only needs room for itself)."""
+    need = section.strength if strength is None else strength
+    return room.capacity >= need and department_may_use(room, section.department_id)
 
 
 def elective_rooms(data: CollegeData, option: ElectiveOption) -> list[Room]:
@@ -57,13 +61,13 @@ def lecture_rooms(data: CollegeData, section: Section) -> list[Room]:
     return [r for r in data.rooms if uses.get(r.type) == "lecture" and room_allowed_for(r, section)]
 
 
-def lab_rooms(data: CollegeData, section: Section, subject: Subject) -> list[Room]:
+def lab_rooms(data: CollegeData, section: Section, subject: Subject, strength: int | None = None) -> list[Room]:
     uses = room_uses(data)
     return [
         r
         for r in data.rooms
         if uses.get(r.type) == "lab"
-        and room_allowed_for(r, section)
+        and room_allowed_for(r, section, strength)
         and (subject.lab_room_type is None or r.type == subject.lab_room_type)
     ]
 
@@ -83,3 +87,10 @@ class Index:
         self.departments = {d.id: d for d in data.departments}
         self.room_types = {t.id: t for t in data.room_types}
         self.day_pos = {d: i for i, d in enumerate(data.settings.days)}
+
+
+def batches_for(a: Assignment, section: Section) -> list[tuple[str | None, int]]:
+    """Who sits each lab session: [(batch id, strength)], or [(None, section strength)] when not in batches."""
+    if a.lab_by_batch and section.batches:
+        return [(b.id, b.strength) for b in section.batches]
+    return [(None, section.strength)]

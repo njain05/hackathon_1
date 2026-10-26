@@ -18,6 +18,7 @@ from ortools.sat.python import cp_model
 
 from .common import (
     Index,
+    batches_for,
     elective_rooms,
     lab_rooms,
     lab_starts,
@@ -80,14 +81,19 @@ def solve_model(
     idx = Index(data)
     s = data.settings
     days, periods = len(s.days), s.periods_per_day
+    day_len = [s.periods_on(day) for day in s.days]  # a short day (e.g. Saturday) has fewer periods
     m = cp_model.CpModel()
 
     sec_occ: dict[Key, list[cp_model.IntVar]] = defaultdict(list)
     tea_occ: dict[Key, list[cp_model.IntVar]] = defaultdict(list)
     room_occ: dict[Key, list[cp_model.IntVar]] = defaultdict(list)
+    # A batch's labs: (section, batch, day, period). The batch is busy, and so is the whole section
+    # for lectures, but other batches may have labs at the same time.
+    batch_occ: dict[tuple[str, str, int, int], list[cp_model.IntVar]] = defaultdict(list)
     sessions_per_day: dict[tuple[int, int], list[cp_model.IntVar]] = defaultdict(list)
+    batch_days: dict[tuple[int, int, int], list[cp_model.IntVar]] = defaultdict(list)
     lectures: list[tuple[cp_model.IntVar, int, int, int, str]] = []
-    labs: list[tuple[cp_model.IntVar, int, int, int, str, int]] = []
+    labs: list[tuple[cp_model.IntVar, int, int, int, str, int, str | None]] = []
 
     for ai, a in enumerate(data.assignments):
         sec, sub = idx.sections[a.section_id], idx.subjects[a.subject_id]
@@ -96,7 +102,7 @@ def solve_model(
             lits = []
             for r in lecture_rooms(data, sec):
                 for d in range(days):
-                    for p in range(periods):
+                    for p in range(day_len[d]):
                         x = m.NewBoolVar(f"lec_{ai}_{d}_{p}_{r.id}")
                         lits.append(x)
                         lectures.append((x, ai, d, p, r.id))
@@ -108,19 +114,27 @@ def solve_model(
 
         if sub.lab_hours:
             b = sub.lab_block_length
-            lits = []
-            for r in lab_rooms(data, sec, sub):
-                for d in range(days):
-                    for start in lab_starts(s, b):
-                        z = m.NewBoolVar(f"lab_{ai}_{d}_{start}_{r.id}")
-                        lits.append(z)
-                        labs.append((z, ai, d, start, r.id, b))
-                        sessions_per_day[ai, d].append(z)
-                        for p in range(start, start + b):
-                            sec_occ[sec.id, d, p].append(z)
-                            tea_occ[lab_teacher(a), d, p].append(z)
-                            room_occ[r.id, d, p].append(z)
-            _exactly(m, lits, sub.lab_hours // b)
+            # One set of lab sessions for the whole section, or one per batch.
+            for bi, (batch, strength) in enumerate(batches_for(a, sec)):
+                lits = []
+                for r in lab_rooms(data, sec, sub, strength):
+                    for d in range(days):
+                        for start in lab_starts(s, b, day_len[d]):
+                            z = m.NewBoolVar(f"lab_{ai}_{bi}_{d}_{start}_{r.id}")
+                            lits.append(z)
+                            labs.append((z, ai, d, start, r.id, b, batch))
+                            if batch is None:
+                                sessions_per_day[ai, d].append(z)
+                            else:
+                                batch_days[ai, bi, d].append(z)
+                            for p in range(start, start + b):
+                                if batch is None:
+                                    sec_occ[sec.id, d, p].append(z)
+                                else:
+                                    batch_occ[sec.id, batch, d, p].append(z)
+                                tea_occ[lab_teacher(a), d, p].append(z)
+                                room_occ[r.id, d, p].append(z)
+                _exactly(m, lits, sub.lab_hours // b)
 
     # ---- Open electives: the whole group meets at once, each option in its own room ----
     group_days: dict[tuple[int, int], list[cp_model.IntVar]] = defaultdict(list)
@@ -129,7 +143,7 @@ def solve_model(
         lits = []
         option_rooms = [elective_rooms(data, o) for o in g.options]
         for d in range(days):
-            for p in range(periods):
+            for p in range(day_len[d]):
                 x = m.NewBoolVar(f"elective_{gi}_{d}_{p}")
                 lits.append(x)
                 group_days[gi, d].append(x)
@@ -150,9 +164,20 @@ def solve_model(
         _exactly(m, lits, g.periods_per_week)
 
     # ---- Hard rules: nobody and nothing is in two places at once ----
+    # A section's batch labs: grouped by (section, day, period), one list per batch.
+    batched: dict[Key, list[list[cp_model.IntVar]]] = defaultdict(list)
+    for (sid, _batch, d, p), lits in batch_occ.items():
+        batched[sid, d, p].append(lits)
     if "sections" not in relax:
-        for lits in sec_occ.values():
-            m.AddAtMostOne(lits)
+        for key in set(sec_occ) | set(batched):
+            whole = sec_occ.get(key, [])
+            if key in batched:
+                # Each batch is in one place at a time, never alongside a whole-section class;
+                # different batches may be in different labs at once.
+                for lits in batched[key]:
+                    m.AddAtMostOne(whole + lits)
+            else:
+                m.AddAtMostOne(whole)
     if "teachers" not in relax:
         for lits in tea_occ.values():
             m.AddAtMostOne(lits)
@@ -178,7 +203,7 @@ def solve_model(
     terms: dict[str, list[cp_model.IntVar]] = {k: [] for k in WEIGHTS}
     if optimize:
         # 1. Spread: each extra session of the same subject on one day is penalised.
-        for lits in [*sessions_per_day.values(), *group_days.values()]:
+        for lits in [*sessions_per_day.values(), *group_days.values(), *batch_days.values()]:
             extra = m.NewIntVar(0, len(lits), "")
             m.Add(extra >= sum(lits) - 1)
             terms["subject_repeats_same_day"].append(extra)
@@ -211,9 +236,21 @@ def solve_model(
             terms["teacher_load_imbalance"].append(spread)
 
         # 4. Student gaps: a free period with classes both earlier and later that day.
+        # While any batch has a lab, the section counts as busy.
+        def any_batch(sid: str, d: int, p: int) -> cp_model.IntVar | int:
+            groups = batched.get((sid, d, p))
+            if not groups:
+                return 0
+            lits = [z for g in groups for z in g]
+            busy = m.NewBoolVar("")
+            for z in lits:
+                m.Add(busy >= z)
+            m.Add(busy <= sum(lits))
+            return busy
+
         for sec in data.sections:
             for d in range(days):
-                occ = [sum(sec_occ.get((sec.id, d, p), [])) for p in range(periods)]
+                occ = [sum(sec_occ.get((sec.id, d, p), [])) + any_batch(sec.id, d, p) for p in range(periods)]
                 for p in range(1, periods - 1):
                     before, after, gap = m.NewBoolVar(""), m.NewBoolVar(""), m.NewBoolVar("")
                     for q in range(p):
@@ -241,13 +278,13 @@ def solve_model(
                 day=s.days[d], period=p + 1, section_id=a.section_id, subject_id=a.subject_id,
                 teacher_id=a.teacher_id, room_id=rid, kind="lecture",
             ))
-    for z, ai, d, start, rid, b in labs:
+    for z, ai, d, start, rid, b, batch in labs:
         if solver.Value(z):
             a = data.assignments[ai]
             for p in range(start, start + b):
                 entries.append(Entry(
                     day=s.days[d], period=p + 1, section_id=a.section_id,
-                    subject_id=a.subject_id, teacher_id=lab_teacher(a), room_id=rid, kind="lab",
+                    subject_id=a.subject_id, teacher_id=lab_teacher(a), room_id=rid, kind="lab", batch=batch,
                 ))
     for y, gi, oi, d, p, rid in elective_rooms_used:
         if solver.Value(y):
@@ -259,7 +296,7 @@ def solve_model(
                 elective_sections=list(g.section_ids),
             ))
     day_pos = {name: i for i, name in enumerate(s.days)}
-    entries.sort(key=lambda e: (day_pos[e.day], e.period, e.section_id))
+    entries.sort(key=lambda e: (day_pos[e.day], e.period, e.section_id, e.batch or ""))
 
     stats = SolveStats(
         solver_status=name,
