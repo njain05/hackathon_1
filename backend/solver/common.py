@@ -1,6 +1,6 @@
 """Helpers shared by the pre-checks and the CP-SAT model."""
 
-from .models import Assignment, CollegeData, Room, Section, Settings, Subject
+from .models import Assignment, CollegeData, ElectiveOption, Room, Section, Settings, Subject
 
 
 def _runs(settings: Settings, cut_after: set[int]) -> list[range]:
@@ -31,8 +31,25 @@ def room_uses(data: CollegeData) -> dict[str, str]:
     return {t.id: t.use for t in data.room_types}
 
 
+def department_may_use(room: Room, department_id: str) -> bool:
+    """Shared rooms, the department's own rooms, and rooms another department shared with it."""
+    return room.department_id in (None, department_id) or department_id in room.shared_with
+
+
 def room_allowed_for(room: Room, section: Section) -> bool:
-    return room.capacity >= section.strength and room.department_id in (None, section.department_id)
+    return room.capacity >= section.strength and department_may_use(room, section.department_id)
+
+
+def elective_rooms(data: CollegeData, option: ElectiveOption) -> list[Room]:
+    """Lecture rooms that seat the option's students, usable by the department offering it."""
+    uses = room_uses(data)
+    subject = next((s for s in data.subjects if s.id == option.subject_id), None)
+    dept = subject.department_id if subject else ""
+    return [
+        r
+        for r in data.rooms
+        if uses.get(r.type) == "lecture" and r.capacity >= option.students and department_may_use(r, dept)
+    ]
 
 
 def lecture_rooms(data: CollegeData, section: Section) -> list[Room]:

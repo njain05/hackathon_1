@@ -98,6 +98,7 @@ class Teacher(BaseModel):
     name: str
     department_id: str = Field(description="Home department; teachers may teach any department")
     max_periods_per_day: int | None = Field(None, ge=1)
+    max_periods_per_week: int | None = Field(None, ge=1, description="Fair-load cap; None = no cap")
     unavailable: list[Slot] = Field(default_factory=list, description="Periods they can't teach")
 
 
@@ -118,6 +119,33 @@ class Room(BaseModel):
     department_id: str | None = Field(
         None, description="If set, only this department's sections use it; None = shared"
     )
+    shared_with: list[str] = Field(
+        default_factory=list,
+        description="Other departments allowed to use this department's room (approved by its HOD)",
+    )
+
+
+class ElectiveOption(BaseModel):
+    """One choice inside an elective group, e.g. "AI for Everyone" taught by Dr. X."""
+
+    subject_id: str
+    teacher_id: str
+    students: int = Field(ge=1, description="Students who chose it (room must seat them)")
+
+
+class ElectiveGroup(BaseModel):
+    """Open elective: students of these sections split into parallel classes at the same time.
+
+    Every option runs in the same periods, each with its own teacher and room. Rooms come
+    from the option subject's department, shared rooms, or rooms another department has
+    shared with it.
+    """
+
+    id: str
+    name: str
+    section_ids: list[str] = Field(min_length=1)
+    periods_per_week: int = Field(ge=1)
+    options: list[ElectiveOption] = Field(min_length=1)
 
 
 class CollegeData(BaseModel):
@@ -130,11 +158,12 @@ class CollegeData(BaseModel):
     teachers: list[Teacher]
     assignments: list[Assignment]
     rooms: list[Room]
+    elective_groups: list[ElectiveGroup] = Field(default_factory=list)
 
 
 # ---------- Output ----------
 
-EntryKind = Literal["lecture", "lab"]
+EntryKind = Literal["lecture", "lab", "elective"]
 
 
 class Entry(BaseModel):
@@ -147,6 +176,9 @@ class Entry(BaseModel):
     teacher_id: str
     room_id: str
     kind: EntryKind
+    elective_group: str | None = Field(
+        None, description="For kind 'elective': the group id. section_id is then the group id too."
+    )
 
 
 class Problem(BaseModel):

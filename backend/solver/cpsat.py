@@ -16,7 +16,16 @@ from dataclasses import dataclass
 
 from ortools.sat.python import cp_model
 
-from .common import Index, lab_rooms, lab_starts, lab_teacher, lecture_rooms, rest_segments, room_uses
+from .common import (
+    Index,
+    elective_rooms,
+    lab_rooms,
+    lab_starts,
+    lab_teacher,
+    lecture_rooms,
+    rest_segments,
+    room_uses,
+)
 from .models import CollegeData, Entry, SolveStats
 
 MAX_CONSECUTIVE = 3  # a teacher teaching more periods in a row than this is penalised
@@ -113,6 +122,33 @@ def solve_model(
                             room_occ[r.id, d, p].append(z)
             _exactly(m, lits, sub.lab_hours // b)
 
+    # ---- Open electives: the whole group meets at once, each option in its own room ----
+    group_days: dict[tuple[int, int], list[cp_model.IntVar]] = defaultdict(list)
+    elective_rooms_used: list[tuple[cp_model.IntVar, int, int, int, int, str]] = []
+    for gi, g in enumerate(data.elective_groups):
+        lits = []
+        option_rooms = [elective_rooms(data, o) for o in g.options]
+        for d in range(days):
+            for p in range(periods):
+                x = m.NewBoolVar(f"elective_{gi}_{d}_{p}")
+                lits.append(x)
+                group_days[gi, d].append(x)
+                for sid in g.section_ids:
+                    sec_occ[sid, d, p].append(x)
+                for oi, o in enumerate(g.options):
+                    tea_occ[o.teacher_id, d, p].append(x)
+                    ys = []
+                    for r in option_rooms[oi]:
+                        y = m.NewBoolVar(f"elective_room_{gi}_{oi}_{d}_{p}_{r.id}")
+                        ys.append(y)
+                        room_occ[r.id, d, p].append(y)
+                        elective_rooms_used.append((y, gi, oi, d, p, r.id))
+                    if ys:
+                        m.Add(sum(ys) == x)  # exactly one room while the group meets
+                    else:
+                        m.Add(x == 0)
+        _exactly(m, lits, g.periods_per_week)
+
     # ---- Hard rules: nobody and nothing is in two places at once ----
     if "sections" not in relax:
         for lits in sec_occ.values():
@@ -142,7 +178,7 @@ def solve_model(
     terms: dict[str, list[cp_model.IntVar]] = {k: [] for k in WEIGHTS}
     if optimize:
         # 1. Spread: each extra session of the same subject on one day is penalised.
-        for lits in sessions_per_day.values():
+        for lits in [*sessions_per_day.values(), *group_days.values()]:
             extra = m.NewIntVar(0, len(lits), "")
             m.Add(extra >= sum(lits) - 1)
             terms["subject_repeats_same_day"].append(extra)
@@ -213,6 +249,14 @@ def solve_model(
                     day=s.days[d], period=p + 1, section_id=a.section_id,
                     subject_id=a.subject_id, teacher_id=lab_teacher(a), room_id=rid, kind="lab",
                 ))
+    for y, gi, oi, d, p, rid in elective_rooms_used:
+        if solver.Value(y):
+            g = data.elective_groups[gi]
+            o = g.options[oi]
+            entries.append(Entry(
+                day=s.days[d], period=p + 1, section_id=g.id, subject_id=o.subject_id,
+                teacher_id=o.teacher_id, room_id=rid, kind="elective", elective_group=g.id,
+            ))
     day_pos = {name: i for i, name in enumerate(s.days)}
     entries.sort(key=lambda e: (day_pos[e.day], e.period, e.section_id))
 
