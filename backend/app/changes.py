@@ -23,7 +23,8 @@ from solver.models import CheckReport, Entry
 
 from .bookings import today
 from .colleges import AdminCollegeDep, DbSession, find_college, hash_key, latest
-from .db import College, DayChange, Leave, as_utc
+from .db import College, DayChange, Leave, as_utc, now
+from .members import MemberDep, can_manage_department, department_name, head_of, member_access, published_data, require_role
 
 router = APIRouter(tags=["changes"])
 
@@ -38,7 +39,7 @@ MAX_DAYS_AHEAD = 366
 
 
 class NewLeave(BaseModel):
-    teacher_id: str
+    teacher_id: str | None = Field(None, description="Left out with a teacher's link: their own leave")
     date: date
     start_period: int | None = Field(None, ge=1, description="Leave out for the whole day")
     end_period: int | None = Field(None, ge=1)
@@ -53,7 +54,28 @@ class LeaveOut(BaseModel):
     end_period: int
     reason: str
     by: str
+    status: Literal["pending", "approved", "rejected"]
+    waiting_for: str | None = Field(description='While pending: "HOD (CSE)", or "the admin" if the department has no HOD link')
+    waiting_since: str | None
+    decided_by: str
+    decision_note: str
+    decided_at: str | None
     created_at: str
+
+
+class LeaveDecision(BaseModel):
+    action: Literal["approve", "reject"]
+    note: str = Field("", max_length=300)
+
+
+class HodView(BaseModel):
+    """An HOD's page: their department's leave requests."""
+
+    department_id: str
+    department_name: str
+    name: str
+    college_name: str
+    leaves: list[LeaveOut]
 
 
 class ChangeIn(BaseModel):
@@ -110,7 +132,7 @@ class AffectedClass(BaseModel):
     end_period: int
     room_id: str
     class_kind: str
-    state: Literal["needs_cover", "substitute", "cancelled"]
+    state: Literal["awaiting_approval", "needs_cover", "substitute", "cancelled"]
     change_id: int | None = None
     new_teacher_id: str | None = None
     suggestions: list[Suggestion]
@@ -209,7 +231,8 @@ def day_check(day: Day, entries: list[Entry]) -> CheckReport:
 
 
 def on_leave(day: Day, teacher_id: str, periods: range) -> bool:
-    return any(lv.teacher_id == teacher_id and set(span(lv)) & set(periods) for lv in day.leaves)
+    """Away then: approved leave, or a request still waiting (so they're never picked as a substitute)."""
+    return any(lv.teacher_id == teacher_id and lv.status != "rejected" and set(span(lv)) & set(periods) for lv in day.leaves)
 
 
 def load(entries: list[Entry], teacher_id: str) -> int:
@@ -276,10 +299,22 @@ def change_out(c: DayChange) -> ChangeOut:
     )
 
 
-def leave_out(lv: Leave) -> LeaveOut:
+def approver_title(session: Session, college: College, data: CollegeData | None, teacher_id: str) -> str:
+    """Who approves this teacher's leave: their department's HOD if it has a link, else the admin."""
+    dept = next((t.department_id for t in (data.teachers if data else []) if t.id == teacher_id), None)
+    return f"HOD ({dept})" if head_of(session, college, dept) else "the admin"
+
+
+def leave_out(lv: Leave, waiting_for: str | None = None) -> LeaveOut:
+    pending = lv.status == "pending"
     return LeaveOut(
         id=lv.id, teacher_id=lv.teacher_id, date=date.fromisoformat(lv.date), start_period=lv.start_period,
-        end_period=lv.end_period, reason=lv.reason, by=lv.by, created_at=as_utc(lv.created_at).isoformat(),
+        end_period=lv.end_period, reason=lv.reason, by=lv.by, status=lv.status,  # type: ignore[arg-type]
+        waiting_for=waiting_for if pending else None,
+        waiting_since=as_utc(lv.created_at).isoformat() if pending else None,
+        decided_by=lv.decided_by, decision_note=lv.decision_note,
+        decided_at=as_utc(lv.decided_at).isoformat() if lv.decided_at else None,
+        created_at=as_utc(lv.created_at).isoformat(),
     )
 
 
@@ -334,21 +369,95 @@ def list_changes(
 
 
 @router.post("/colleges/{ref}/leaves", response_model=LeaveOut, status_code=201)
-def add_leave(ref: str, body: NewLeave, session: DbSession, x_admin_key: Annotated[str | None, Header()] = None) -> LeaveOut:
-    """Mark leave. Anyone may report it (a teacher from their phone); nothing changes for
+def add_leave(
+    ref: str, body: NewLeave, session: DbSession,
+    x_admin_key: Annotated[str | None, Header()] = None, x_member_key: Annotated[str | None, Header()] = None,
+) -> LeaveOut:
+    """Ask for leave. A teacher, with their own link, asks for themselves: it waits for their
+    department's HOD. The admin may add anyone's leave: approved at once. Nothing changes for
     students until the admin assigns a substitute or cancels the class."""
     college = find_college(session, ref)
+    admin = is_admin(college, x_admin_key)
+    teacher_id = body.teacher_id
+    if not admin:
+        _, member = member_access(ref, session, x_member_key)
+        require_role(member, "teacher")
+        if teacher_id not in (None, member.teacher_id):
+            raise HTTPException(403, "You can only ask for your own leave.")
+        teacher_id = member.teacher_id
     check_date(body.date)
     day = load_day(session, college, body.date)
-    if body.teacher_id not in {t.id for t in day.data.teachers}:
-        raise HTTPException(400, f"No teacher with the code \"{body.teacher_id}\".")
+    if not teacher_id or teacher_id not in {t.id for t in day.data.teachers}:
+        raise HTTPException(400, f"No teacher with the code \"{teacher_id}\".")
     periods = periods_of(day, body.start_period, body.end_period)
-    if on_leave(day, body.teacher_id, periods):
-        raise HTTPException(409, "This teacher is already on leave for some of these periods that day.")
-    lv = Leave(college_id=college.id, teacher_id=body.teacher_id, date=body.date.isoformat(),
+    if on_leave(day, teacher_id, periods):
+        raise HTTPException(409, "There is already leave for some of these periods that day.")
+    lv = Leave(college_id=college.id, teacher_id=teacher_id, date=body.date.isoformat(),
                start_period=periods.start, end_period=periods.stop - 1, reason=body.reason.strip(),
-               by="admin" if is_admin(college, x_admin_key) else "teacher")
+               by="admin" if admin else "teacher", status="approved" if admin else "pending",
+               decided_by="Admin" if admin else "", decided_at=now() if admin else None)
     session.add(lv)
+    session.commit()
+    return leave_out(lv, approver_title(session, college, day.data, teacher_id))
+
+
+@router.get("/colleges/{ref}/my-leaves", response_model=list[LeaveOut])
+def my_leaves(who: MemberDep, session: DbSession) -> list[LeaveOut]:
+    """A teacher's own leave requests (last 30 days and later), newest date first."""
+    college, member = who
+    require_role(member, "teacher")
+    data = published_data(session, college)
+    rows = session.scalars(
+        select(Leave)
+        .where(Leave.college_id == college.id, Leave.teacher_id == member.teacher_id,
+               Leave.date >= (today() - timedelta(days=30)).isoformat())
+        .order_by(Leave.date.desc(), Leave.id.desc())
+    )
+    waiting = approver_title(session, college, data, member.teacher_id or "")
+    return [leave_out(lv, waiting) for lv in rows]
+
+
+@router.get("/colleges/{ref}/hod", response_model=HodView)
+def hod_view(who: MemberDep, session: DbSession) -> HodView:
+    """HOD: their department's leave requests (last 30 days and later), waiting ones first."""
+    college, head = who
+    require_role(head, "hod")
+    data = published_data(session, college)
+    mine = {t.id for t in (data.teachers if data else []) if t.department_id == head.department_id}
+    rows = session.scalars(
+        select(Leave).where(Leave.college_id == college.id, Leave.date >= (today() - timedelta(days=30)).isoformat())
+        .order_by(Leave.date, Leave.id)
+    )
+    title = f"HOD ({head.department_id})"
+    leaves = sorted((leave_out(lv, title) for lv in rows if lv.teacher_id in mine), key=lambda x: (x.status != "pending", x.date))
+    return HodView(department_id=head.department_id, department_name=department_name(data, head.department_id), name=head.name,
+                   college_name=college.name, leaves=leaves)
+
+
+@router.post("/colleges/{ref}/leaves/{leave_id}/decide", response_model=LeaveOut)
+def decide_leave(
+    ref: str, leave_id: int, body: LeaveDecision, session: DbSession,
+    x_admin_key: Annotated[str | None, Header()] = None, x_member_key: Annotated[str | None, Header()] = None,
+) -> LeaveOut:
+    """Approve or reject a leave request: the HOD of the teacher's department, or the admin on their behalf."""
+    college = find_college(session, ref)
+    lv = session.get(Leave, leave_id)
+    if lv is None or lv.college_id != college.id:
+        raise HTTPException(404, "No such leave request.")
+    data = published_data(session, college)
+    dept = next((t.department_id for t in (data.teachers if data else []) if t.id == lv.teacher_id), None)
+    if is_admin(college, x_admin_key):
+        by = "Admin"
+    else:
+        _, head = member_access(ref, session, x_member_key)
+        require_role(head, "hod")
+        if not can_manage_department(head, dept):
+            raise HTTPException(403, f"Only the HOD of {dept or 'this teacher’s department'} can decide this leave.")
+        by = f"HOD ({head.department_id})" + (f", {head.name}" if head.name else "")
+    if lv.status != "pending":
+        raise HTTPException(409, f"This leave is already {lv.status}.")
+    lv.status = "approved" if body.action == "approve" else "rejected"
+    lv.decided_by, lv.decision_note, lv.decided_at = by, body.note.strip(), now()
     session.commit()
     return leave_out(lv)
 
@@ -365,17 +474,19 @@ def cover(college: AdminCollegeDep, session: DbSession, on: Annotated[date, Quer
     leaves: list[LeaveCover] = []
     for lv in day.leaves:
         classes: list[AffectedClass] = []
-        for e, a, b in classes_of(plain, lv.teacher_id, span(lv)):
+        for e, a, b in classes_of(plain, lv.teacher_id, span(lv)) if lv.status != "rejected" else []:
             periods = range(a, b + 1)
             done = next((c for c in day.changes if c.kind in ("substitute", "cancel") and c.section_id == e.section_id and set(span(c)) & set(periods)), None)
             classes.append(AffectedClass(
                 section_id=e.section_id, subject_id=e.subject_id, start_period=a, end_period=b, room_id=e.room_id,
                 class_kind=e.kind,
-                state="needs_cover" if done is None else "substitute" if done.kind == "substitute" else "cancelled",
+                state=("awaiting_approval" if lv.status == "pending" else "needs_cover") if done is None
+                else "substitute" if done.kind == "substitute" else "cancelled",
                 change_id=done.id if done else None, new_teacher_id=done.new_teacher_id if done else None,
-                suggestions=[] if done else suggest(day, entries, e.section_id, e.subject_id, periods, lv.teacher_id),
+                suggestions=[] if done or lv.status != "approved" else suggest(day, entries, e.section_id, e.subject_id, periods, lv.teacher_id),
             ))
-        leaves.append(LeaveCover(**leave_out(lv).model_dump(), classes=classes))
+        waiting = approver_title(session, college, day.data, lv.teacher_id)
+        leaves.append(LeaveCover(**leave_out(lv, waiting).model_dump(), classes=classes))
     return CoverView(date=on, day=day.day, working_day=day.working, leaves=leaves,
                      changes=[change_out(c) for c in day.changes], check=day_check(day, entries))
 
@@ -442,8 +553,11 @@ def add_change(body: ChangeIn, college: AdminCollegeDep, session: DbSession) -> 
     periods = periods_of(day, body.start_period, body.end_period or body.start_period)
     if body.section_id not in {s.id for s in data.sections}:
         raise HTTPException(400, f"No section with the code \"{body.section_id}\".")
-    if body.leave_id is not None and not any(lv.id == body.leave_id for lv in day.leaves):
+    linked = next((lv for lv in day.leaves if lv.id == body.leave_id), None)
+    if body.leave_id is not None and linked is None:
         raise HTTPException(400, "That leave isn't on this date.")
+    if linked is not None and linked.status != "approved":
+        raise HTTPException(409, "This leave isn't approved yet. Cover is arranged once the HOD (or the admin) approves it.")
 
     entries = actual(day)
     replaced: list[DayChange] = []

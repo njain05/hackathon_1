@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { ApiError } from "@/lib/api";
-import { periodText } from "@/lib/bookings";
+import { periodText, since } from "@/lib/bookings";
 import {
   type AffectedClass,
   type CoverView,
@@ -14,6 +14,7 @@ import {
   addDays,
   addLeave,
   changeText,
+  decideLeave,
   extraSlots,
   getCover,
   isoDate,
@@ -45,7 +46,7 @@ function LeaveForm({ data, admin, date, onDone }: { data: CollegeData; admin: Ad
     setBusy(true);
     setError(null);
     try {
-      await addLeave(admin.code, { teacher_id: teacher, date, reason, ...(whole ? {} : { start_period: from, end_period: to }) }, admin);
+      await addLeave(admin.code, { teacher_id: teacher, date, reason, ...(whole ? {} : { start_period: from, end_period: to }) }, { admin });
       setTeacher("");
       setReason("");
       onDone();
@@ -152,7 +153,9 @@ function ClassCover({ cls, data, admin, date, leaveId, onDone }: {
             {periodText(data, cls.start_period, cls.end_period)} · {n.room(cls.room_id)}
           </span>
         </span>
-        {cls.state === "needs_cover" ? (
+        {cls.state === "awaiting_approval" ? (
+          <span className="rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft">Cover after approval</span>
+        ) : cls.state === "needs_cover" ? (
           <span className="rounded-full bg-blush px-3 py-1 text-sm font-semibold text-err">Needs cover</span>
         ) : (
           <>
@@ -197,7 +200,7 @@ function ClassCover({ cls, data, admin, date, leaveId, onDone }: {
                 {all ? "Show fewer" : `Show all ${cls.suggestions.length} free teachers`}
               </button>
             )}
-            <button type="button" className="btn-quiet !py-1 ml-auto" disabled={busy} onClick={() => act(() => addChange(admin, { ...base, kind: "cancel" }))}>
+            <button type="button" className="btn-quiet !py-1 ml-auto" disabled={busy} onClick={() => window.confirm("Cancel this class? Students and the teacher will see it as cancelled.") && act(() => addChange(admin, { ...base, kind: "cancel" }))}>
               Cancel this class
             </button>
           </div>
@@ -331,33 +334,49 @@ export default function DailyChanges() {
   const [picked, setDate] = useState<string | null>(null);
   // "Today" is read only in the browser (admin is undefined while prerendering).
   const date = admin ? (picked ?? isoDate(new Date())) : "";
-  const [data, setData] = useState<{ code: string; value: CollegeData } | null>(null);
-  const [view, setView] = useState<{ key: string; value: CoverView | null; error: string | null } | null>(null);
+  const [data, setData] = useState<{ code: string; value: CollegeData | null; error: string | null } | null>(null);
+  const [view, setView] = useState<{ day: string; value: CoverView | null; error: string | null } | null>(null);
   const [reload, setReload] = useState(0);
   const refresh = () => setReload((r) => r + 1);
+  // Page-level actions (remove leave, undo, approve leave): one at a time, errors shown.
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const act = async (run: () => Promise<unknown>, fallback: string) => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await run();
+    } catch (e) {
+      setActionError(errorText(e, fallback));
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
 
   const code = admin?.code;
   useEffect(() => {
     if (!code) return;
     getPublished(code)
-      .then((t) => setData({ code, value: t.data }))
-      .catch(() => undefined);
-  }, [code]);
+      .then((t) => setData({ code, value: t.data, error: null }))
+      .catch((e: unknown) => setData({ code, value: null, error: errorText(e, "Couldn't load the published timetable.") }));
+  }, [code, reload]);
 
-  const key = `${code}|${date}|${reload}`;
+  const key = `${code}|${date}`;
   useEffect(() => {
     if (!admin) return;
     let live = true;
     getCover(admin, date)
-      .then((v) => live && setView({ key, value: v, error: null }))
-      .catch((e: unknown) => live && setView({ key, value: null, error: errorText(e, "Couldn't load this day.") }));
+      .then((v) => live && setView({ day: key, value: v, error: null }))
+      .catch((e: unknown) => live && setView({ day: key, value: null, error: errorText(e, "Couldn't load this day.") }));
     return () => {
       live = false;
     };
-  }, [admin, date, key]);
+  }, [admin, date, key, reload]);
 
   const college = data?.code === code ? data?.value : null;
-  const current = view?.key === key ? view : null;
+  // After an action the day reloads in the background: keep showing it meanwhile.
+  const current = view?.day === key ? view : null;
   const v = current?.value;
   const changeLines = useMemo(() => (v && college ? v.changes.map((c) => ({ c, text: changeText(c, college, { role: "admin" }) })) : []), [v, college]);
 
@@ -409,7 +428,23 @@ export default function DailyChanges() {
         </div>
 
         {current?.error && <p className="font-semibold text-err">{current.error}</p>}
-        {!college && <p className="text-ink-soft">Loading…</p>}
+        {actionError && (
+          <p role="alert" className="font-semibold text-err">
+            {actionError}
+          </p>
+        )}
+        {!college &&
+          (data?.code === code && data?.error ? (
+            <div className="flex flex-col gap-2 rounded-md bg-blush p-3">
+              <p className="font-semibold">{data.error}</p>
+              <p>Leave and daily changes work on the published timetable. Publish it on the Timetables page first.</p>
+              <button type="button" className="btn-quiet w-fit" onClick={refresh}>
+                Try again
+              </button>
+            </div>
+          ) : (
+            <p className="text-ink-soft">Loading…</p>
+          ))}
 
         {/* The forms stay mounted when the day changes; only the day's lists reload. */}
         {college && (
@@ -450,16 +485,47 @@ export default function DailyChanges() {
                         <button
                           type="button"
                           className="btn-quiet !py-1"
-                          onClick={async () => {
-                            if (!window.confirm("Remove this leave? Substitutes and cancellations made for it are removed too.")) return;
-                            await removeLeave(admin, lv.id).catch(() => undefined);
-                            refresh();
-                          }}
+                          disabled={busy}
+                          onClick={() =>
+                            window.confirm("Remove this leave? Substitutes and cancellations made for it are removed too.") &&
+                            act(() => removeLeave(admin, lv.id), "Couldn't remove the leave.")
+                          }
                         >
                           Remove leave
                         </button>
                       </header>
-                      {lv.classes.length === 0 ? (
+                      {lv.status === "pending" && (
+                        <div className="flex flex-wrap items-center gap-2 rounded-md bg-blush px-3 py-2">
+                          <span className="mr-auto">
+                            <span className="font-semibold">Waiting for {lv.waiting_for}</span>
+                            {lv.waiting_since && ` since ${since(lv.waiting_since)}`}. Cover can be arranged once it is approved.
+                          </span>
+                          <button type="button" className="btn-quiet !py-1" disabled={busy}
+                            onClick={() => act(() => decideLeave(admin.code, lv.id, "approve", "", { admin }), "Couldn't approve the leave.")}>
+                            Approve as admin
+                          </button>
+                          <button type="button" className="btn-quiet !py-1" disabled={busy}
+                            onClick={() => {
+                              const note = window.prompt("Reason for not approving (the teacher will see it):", "");
+                              if (note !== null) void act(() => decideLeave(admin.code, lv.id, "reject", note, { admin }), "Couldn't reject the leave.");
+                            }}>
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                      {lv.status === "rejected" && (
+                        <p className="text-ink-soft">
+                          Not approved by {lv.decided_by}
+                          {lv.decision_note && `: “${lv.decision_note}”`}. No cover needed.
+                        </p>
+                      )}
+                      {lv.status === "approved" && lv.decided_by && lv.by === "teacher" && (
+                        <p className="text-sm text-ok">
+                          Approved by {lv.decided_by}
+                          {lv.decision_note && `: “${lv.decision_note}”`}
+                        </p>
+                      )}
+                      {lv.status === "rejected" ? null : lv.classes.length === 0 ? (
                         <p className="text-ink-soft">No classes in these periods. Nothing to arrange.</p>
                       ) : (
                         <ul className="flex flex-col gap-2">
@@ -500,10 +566,8 @@ export default function DailyChanges() {
                       <button
                         type="button"
                         className="btn-quiet !py-1"
-                        onClick={async () => {
-                          await removeChange(admin, c.id).catch(() => undefined);
-                          refresh();
-                        }}
+                        disabled={busy}
+                        onClick={() => act(() => removeChange(admin, c.id), "Couldn't undo that change.")}
                       >
                         Undo
                       </button>

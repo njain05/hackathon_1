@@ -131,8 +131,27 @@ class BookingAction(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class Member(Base):
+    """A person with their own secret link and a role in one department: the HOD (approves
+    leave), and later the timetable in-charge or a teacher. The college admin is separate
+    (the admin key on `colleges`)."""
+
+    __tablename__ = "members"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    college_id: Mapped[int] = mapped_column(ForeignKey("colleges.id", ondelete="CASCADE"), index=True)
+    department_id: Mapped[str] = mapped_column(String(80))  # the department code, as in CollegeData
+    role: Mapped[str] = mapped_column(String(20))  # hod | incharge | teacher
+    name: Mapped[str] = mapped_column(String(120), default="")
+    teacher_id: Mapped[str | None] = mapped_column(String(80), nullable=True)  # the teacher code, if any
+    key_hash: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Leave(Base):
-    """A teacher away on a date, for some periods. Reported by the teacher or added by the admin."""
+    """A teacher away on a date, for some periods. A teacher's request waits for their HOD;
+    leave the admin enters is approved at once."""
 
     __tablename__ = "leaves"
 
@@ -144,6 +163,10 @@ class Leave(Base):
     end_period: Mapped[int] = mapped_column(Integer)  # inclusive
     reason: Mapped[str] = mapped_column(String(300), default="")
     by: Mapped[str] = mapped_column(String(20))  # admin | teacher
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | approved | rejected
+    decided_by: Mapped[str] = mapped_column(String(120), default="")
+    decision_note: Mapped[str] = mapped_column(String(300), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

@@ -45,7 +45,8 @@ Everything about a college comes from the admin's data. Nothing is hard-coded: n
   - `approval_steps`: the admin's ordered chain (e.g. HOD, Dean), each with its own secret link. With none set, the admin approves;
   - `booking_actions`: each signature (who, step, note, time).
 - **Daily changes** (`backend/app/changes.py`, not in the solver):
-  - `leaves`: teacher, date, period range, reason, reported by the teacher or added by the admin;
+  - `leaves`: teacher, date, period range, reason, `status` (`pending` → `approved` / `rejected`, by whom, with a note). A teacher asks; the admin's entries are approved at once;
+  - `members` (`backend/app/members.py`): people with a role in one department and their own secret link: `hod` (approves that department's leave), `teacher` (asks for leave), and `incharge` (P1's departments work);
   - `day_changes`: date, `kind` (`substitute` / `cancel` / `extra`), section, subject, period range, the usual teacher, the substitute, room, note, and the leave it belongs to;
   - a date's actual timetable = the published weekday + its changes.
 
@@ -127,7 +128,8 @@ The model is built so each of these is an **additive, optional field**: existing
 | Organisers get a **tracking link** (`/track/<token>`), with no login | Like a parcel: "Waiting for Dean since 2 hours". Their phone or email is shown only to approvers, never on the public events calendar. |
 | **Daily changes sit on top of the published timetable**; it is never regenerated for leave | Students' week stays stable, and one absence doesn't reshuffle everyone. The changes feed says exactly what is different today. |
 | **Each change is validated by re-running the independent checker** on the day it produces, ignoring only what a changed day must differ in (weekly hours, the assigned teacher) | One source of truth for clash rules, so a substitute can never be double-booked and an extra class never takes a busy room. |
-| **Anyone may report leave, only the admin changes the day** | No teacher login is needed. A false report only creates a to-do for the admin, and students see changes only after the admin assigns cover or cancels. |
+| **Leave goes teacher → HOD of their department → the timetable in-charge arranges cover** | It matches how colleges work. Only a teacher's own link can ask (students never see it), only that department's HOD can approve, and cover is arranged only for approved leave. |
+| **Roles are private links, not accounts** (`members`: HOD, teacher, in-charge; one active HOD per department) | Nothing to sign up for or forget. The admin hands each person a link, and a new link revokes the old one. One table and one header serve every role. |
 | Claude chatbot uses **tool use**, called **from the backend only** | Answers come from real data and real functions, never guesses. The API key is never exposed to the browser. |
 | Chatbot model: **Haiku** (latest) | Fast and cheap enough for a live demo with many judges. Set a spending limit in the Anthropic console. |
 

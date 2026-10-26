@@ -3,6 +3,39 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: Leave needs the HOD's approval; teacher, HOD and People pages** (user request)
+  - **One shared `members` table** (agreed with the P1 session, so there is a single HOD system):
+    - `backend/app/members.py`: id, college, `department_id`, `role` (`hod` / `incharge` / `teacher`), name, `teacher_id`, key hash, `revoked_at`;
+    - header `X-Member-Key`; links `/hod#college=…&key=…` and `/teacher#college=…&key=…`;
+    - helpers `member_access`/`MemberDep`, `require_role`, `can_manage_department`, `head_of`;
+    - admin endpoints: department HOD link (one active HOD per department, so a new link revokes the old one), teacher links, and `GET /colleges/{ref}/me`;
+    - P1's departments work (in-charge, room sharing) builds on it.
+  - **Leave flow**:
+    - **only a teacher with their own link** (or the admin) can ask for leave. A student can't, nor can one teacher for another;
+    - a teacher's request is `pending` and waits for **the HOD of their department** (or the admin, if that department has no HOD link);
+    - the HOD approves or rejects with a note, and only for their own department. The admin may decide on the HOD's behalf;
+    - leave the admin enters is approved at once;
+    - **cover is arranged only after approval**: until then the classes show "Cover after approval" and there are no suggestions, and the API refuses cover for an unapproved leave;
+    - rejected leave needs no cover;
+    - a pending request also keeps that teacher out of substitute suggestions.
+  - **Pages**:
+    - **/teacher** (only via the teacher's link): "Hello, <name>", "Ask for leave" (date, whole day or periods, reason seen only by the HOD and in-charge), "Your leave requests" with status ("Waiting for HOD (CSE) since 2 hours" / "Approved by HOD (CSE), Dr. Ramesh Gupta: “Get well soon”" / not approved and why), and their changes feed;
+    - **/hod** (only via the HOD link): "Waiting for you" with a note and Approve / Reject (a confirm before rejecting without a note), "Decided", and Refresh. It reloads when reopened;
+    - **/people** (admin): an HOD per department (name + make or replace the link) and a link per teacher ("Make links for all N teachers without one"). Links are saved in this browser;
+    - **/my no longer has Mark leave**: students can't see or use it. The nav shows Teacher / HOD only on a device holding that link.
+  - **P1 audit fixes in my files**:
+    - /changes: remove-leave and undo show errors and can't be double-clicked; "Cancel this class" asks first; the day keeps showing while it reloads after an action; if the timetable isn't published it says so with Try again;
+    - /my: "Couldn't check today's changes" when the feed fails (so a cancelled class isn't mistaken for a normal one), and it re-checks when the phone comes back online or the app is reopened.
+  - **Tests**: 60 total, all pass. New: only a teacher's own link can ask, the HOD decides only their department, cover is refused before approval, rejection and its note, link replacement, and no HOD means the admin approves. Three P4 tests now search the week for a suitable day, because the solver may place classes differently from run to run.
+  - **Tested in the browser** (local test college):
+    - People: made the CSE HOD link and links for all 14 teachers;
+    - HK's teacher link: asked for Tue leave, which shows "Waiting for HOD (CSE)";
+    - /changes: "Cover after approval";
+    - HOD link: approved with "Get well soon";
+    - teacher page: "Approved by HOD (CSE), Dr. Ramesh Gupta";
+    - /changes: 2 classes need cover, with substitutes;
+    - a device without a teacher link: no leave button on /my, and /teacher says it is for teachers;
+    - lint and production build pass.
 - **2026-10-26: P4 Teacher leave, substitutes and changes feed** (daily changes on top of the published timetable; it is never regenerated)
   - **How a day works** (`backend/app/changes.py`):
     - a date's actual timetable = the published week's entries for that weekday, then that date's changes in order;
@@ -265,7 +298,7 @@ Update after every completed step. Newest entries at the top of each section.
 
 ## Next
 1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
-2. Push P4 when the user says so. **The user asked for no deploys during their 3:30 meeting**, and a push redeploys Render and Vercel. P3 is already live.
+2. Push P4 and the leave approval when the user says so. **The user asked for no deploys during their 3:30 meeting**, and a push redeploys Render and Vercel. P3 is already live.
 3. P5: Ask the timetable (Claude helper), or the roles work the user is discussing with the P1 session (separate worktree).
 
 ## Problems & fixes

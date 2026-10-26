@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAccess } from "@/lib/access";
 import { useApproverAccess } from "@/lib/bookings";
 import { useAdminAccess } from "@/lib/cloud";
+import { useMemberAccess } from "@/lib/members";
 
 // Everyone: students, teachers and organisers.
 const PUBLIC_LINKS = [
@@ -20,14 +21,18 @@ const STAFF_LINKS = [
 
 export default function AppNav({ collegeName }: { collegeName?: string }) {
   const path = usePathname();
-  // Changes (admin) and Approvals only for people holding an admin or approver link on this device.
+  // Teacher, HOD, Changes and People (admin) and Approvals only for people holding that link on this device.
   const admin = useAdminAccess();
   const approver = useApproverAccess();
+  const teacher = useMemberAccess("teacher");
+  const hod = useMemberAccess("hod");
   const access = useAccess();
   const links = [
     ...(access?.staff ? STAFF_LINKS : []),
     ...PUBLIC_LINKS,
-    ...(admin ? [{ href: "/changes", label: "Changes" }] : []),
+    ...(teacher ? [{ href: "/teacher", label: "Teacher" }] : []),
+    ...(hod ? [{ href: "/hod", label: "HOD" }] : []),
+    ...(admin ? [{ href: "/changes", label: "Changes" }, { href: "/people", label: "People" }] : []),
     ...(admin || approver ? [{ href: "/approvals", label: "Approvals" }] : []),
   ];
   return (

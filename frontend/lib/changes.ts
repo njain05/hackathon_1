@@ -4,6 +4,7 @@
 import { call } from "./api";
 import { periodText } from "./bookings";
 import type { AdminAccess } from "./cloud";
+import { type MemberAccess, asMember } from "./members";
 import type { CollegeData, Entry, SolveResult } from "./types";
 
 export type CheckReport = NonNullable<SolveResult["check"]>;
@@ -41,7 +42,22 @@ export interface Leave {
   end_period: number;
   reason: string;
   by: "admin" | "teacher";
+  status: "pending" | "approved" | "rejected";
+  /** While pending: "HOD (CSE)", or "the admin" if the department has no HOD link. */
+  waiting_for: string | null;
+  waiting_since: string | null;
+  decided_by: string;
+  decision_note: string;
+  decided_at: string | null;
   created_at: string;
+}
+
+export interface HodView {
+  department_id: string;
+  department_name: string;
+  name: string;
+  college_name: string;
+  leaves: Leave[];
 }
 
 export interface Suggestion {
@@ -57,7 +73,7 @@ export interface AffectedClass {
   end_period: number;
   room_id: string;
   class_kind: "lecture" | "lab";
-  state: "needs_cover" | "substitute" | "cancelled";
+  state: "awaiting_approval" | "needs_cover" | "substitute" | "cancelled";
   change_id: number | null;
   new_teacher_id: string | null;
   suggestions: Suggestion[];
@@ -103,11 +119,33 @@ export const getDay = (code: string, date: string) => call<DayView>(`/colleges/$
 export const getChanges = (code: string, from: string, to: string) =>
   call<Change[]>(`/colleges/${enc(code)}/changes?from=${enc(from)}&to=${enc(to)}`);
 
-export const addLeave = (
-  code: string,
-  body: { teacher_id: string; date: string; start_period?: number; end_period?: number; reason: string },
-  admin?: AdminAccess | null,
-) => call<Leave>(`/colleges/${enc(code)}/leaves`, { method: "POST", headers: admin ? asAdmin(admin) : {}, body: JSON.stringify(body) });
+export type NewLeave = { teacher_id?: string; date: string; start_period?: number; end_period?: number; reason: string };
+
+/** Leave for anyone, approved at once (admin), or a teacher's own request (waits for their HOD). */
+export const addLeave = (code: string, body: NewLeave, by: { admin: AdminAccess } | { member: MemberAccess }) =>
+  call<Leave>(`/colleges/${enc(code)}/leaves`, {
+    method: "POST",
+    headers: "admin" in by ? asAdmin(by.admin) : asMember(by.member),
+    body: JSON.stringify(body),
+  });
+
+export const getMyLeaves = (m: MemberAccess) => call<Leave[]>(`/colleges/${enc(m.college_code)}/my-leaves`, { headers: asMember(m) });
+
+export const getHodView = (m: MemberAccess) => call<HodView>(`/colleges/${enc(m.college_code)}/hod`, { headers: asMember(m) });
+
+/** The HOD of the teacher's department, or the admin on their behalf. */
+export const decideLeave = (code: string, id: number, action: "approve" | "reject", note: string, by: { admin: AdminAccess } | { member: MemberAccess }) =>
+  call<Leave>(`/colleges/${enc(code)}/leaves/${id}/decide`, {
+    method: "POST",
+    headers: "admin" in by ? asAdmin(by.admin) : asMember(by.member),
+    body: JSON.stringify({ action, note }),
+  });
+
+export const LEAVE_STATUS: Record<Leave["status"], string> = {
+  pending: "Waiting for approval",
+  approved: "Approved",
+  rejected: "Not approved",
+};
 
 export const getCover = (a: AdminAccess, date: string) =>
   call<CoverView>(`/colleges/${enc(a.code)}/cover?date=${enc(date)}`, { headers: asAdmin(a) });

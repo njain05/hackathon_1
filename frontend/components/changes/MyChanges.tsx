@@ -7,12 +7,10 @@ import {
   type ChangeViewer,
   type DayView,
   addDays,
-  addLeave,
   affects,
   changeText,
   getChanges,
   getDay,
-  isoDate,
   shortDate,
 } from "@/lib/changes";
 import type { CollegeData } from "@/lib/types";
@@ -24,19 +22,49 @@ const UPCOMING_DAYS = 6;
  * coming up this week, for the college open on this device.
  */
 export function useMyDay(code: string | null, date: string | null) {
-  const [state, setState] = useState<{ key: string; day: DayView | null; upcoming: Change[] }>({ key: "", day: null, upcoming: [] });
+  const [state, setState] = useState<{ key: string; day: DayView | null; upcoming: Change[]; error: string | null }>({
+    key: "", day: null, upcoming: [], error: null,
+  });
+  const [tick, setTick] = useState(0);
   const key = `${code}|${date}`;
   useEffect(() => {
     if (!code || !date) return;
     let live = true;
     Promise.all([getDay(code, date), getChanges(code, date, addDays(date, UPCOMING_DAYS))])
-      .then(([day, upcoming]) => live && setState({ key, day, upcoming }))
-      .catch(() => undefined); // offline or asleep: the published week still shows
+      .then(([day, upcoming]) => live && setState({ key, day, upcoming, error: null }))
+      // Offline or asleep: the published week still shows, but say that today's changes are unknown.
+      .catch((e: unknown) => live && setState((s) => ({ ...s, key, error: e instanceof ApiError ? e.message : "Couldn't check today's changes." })));
     return () => {
       live = false;
     };
-  }, [code, date, key]);
-  return state.key === key ? state : { key, day: null, upcoming: [] };
+  }, [code, date, key, tick]);
+  // Check again when the phone comes back online or the app is opened again.
+  useEffect(() => {
+    const again = () => setTick((t) => t + 1);
+    const onVisible = () => document.visibilityState === "visible" && again();
+    window.addEventListener("online", again);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", again);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+  const retry = () => setTick((t) => t + 1);
+  return state.key === key ? { ...state, retry } : { key, day: null, upcoming: [], error: null, retry };
+}
+
+/** Shown when today's changes couldn't be loaded, so a cancelled class isn't mistaken for a normal one. */
+export function ChangesUnknown({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <p role="status" className="flex flex-wrap items-center gap-3 rounded-md bg-blush px-3 py-2 print:hidden">
+      <span>
+        <span className="font-semibold">Couldn’t check today’s changes</span> (cancelled classes, substitutes). {error}
+      </span>
+      <button type="button" className="btn-quiet !py-1" onClick={onRetry}>
+        Try again
+      </button>
+    </p>
+  );
 }
 
 /** "Changes today" at the top of My timetable, then what's coming up this week. */
@@ -72,99 +100,6 @@ export function ChangesFeed({ data, me, date, upcoming }: { data: CollegeData; m
           </ul>
         </details>
       )}
-    </section>
-  );
-}
-
-/** A teacher reports leave from their own phone. The admin then arranges cover. */
-export function MarkLeave({ code, data, teacherId }: { code: string; data: CollegeData; teacherId: string }) {
-  const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(() => isoDate(new Date()));
-  const [whole, setWhole] = useState(true);
-  const [from, setFrom] = useState(1);
-  const [to, setTo] = useState(1);
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const n = data.settings.periods_per_day;
-
-  if (!open)
-    return (
-      <div className="flex flex-wrap items-center gap-3 print:hidden">
-        <button type="button" className="btn-quiet" onClick={() => { setOpen(true); setDone(null); }}>
-          Mark leave
-        </button>
-        {done && <span className="font-semibold text-ok">{done}</span>}
-      </div>
-    );
-
-  const send = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await addLeave(code, { teacher_id: teacherId, date, reason, ...(whole ? {} : { start_period: from, end_period: to }) });
-      setDone(`Leave noted for ${shortDate(date)}. The timetable in-charge will arrange cover, and your classes will show the change.`);
-      setOpen(false);
-      setReason("");
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't send. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section aria-label="Mark leave" className="flex flex-col gap-3 rounded-md border border-line bg-paper p-4 print:hidden">
-      <h2 className="text-lg font-bold">Mark leave</h2>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="field-label">Date</span>
-          <input type="date" className="field" min={isoDate(new Date())} value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <div role="group" aria-label="How long" className="flex rounded-md border border-line bg-cream p-1">
-          {[true, false].map((w) => (
-            <button
-              key={String(w)}
-              type="button"
-              aria-pressed={whole === w}
-              onClick={() => setWhole(w)}
-              className={`rounded px-3 py-1.5 text-sm font-semibold ${whole === w ? "bg-sky/50" : "hover:bg-blush"}`}
-            >
-              {w ? "Whole day" : "Some periods"}
-            </button>
-          ))}
-        </div>
-        {!whole && (
-          <>
-            <label className="flex flex-col gap-1">
-              <span className="field-label">From period</span>
-              <select className="field" value={from} onChange={(e) => { const v = Number(e.target.value); setFrom(v); if (to < v) setTo(v); }}>
-                {[...Array(n)].map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="field-label">To period</span>
-              <select className="field" value={to} onChange={(e) => setTo(Number(e.target.value))}>
-                {[...Array(n)].map((_, i) => i + 1 >= from && <option key={i} value={i + 1}>{i + 1}</option>)}
-              </select>
-            </label>
-          </>
-        )}
-        <label className="flex min-w-48 flex-1 flex-col gap-1">
-          <span className="field-label">Reason (optional)</span>
-          <input className="field" value={reason} onChange={(e) => setReason(e.target.value)} />
-        </label>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn-primary" disabled={busy || !date} onClick={send}>
-          {busy ? "Sending…" : "Send to the timetable in-charge"}
-        </button>
-        <button type="button" className="btn-quiet" onClick={() => setOpen(false)}>
-          Cancel
-        </button>
-      </div>
-      {error && <p className="font-semibold text-err">{error}</p>}
     </section>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
-import { ChangesFeed, MarkLeave, useMyDay } from "@/components/changes/MyChanges";
+import { ChangesFeed, ChangesUnknown, useMyDay } from "@/components/changes/MyChanges";
 import { CollegeCodeForm, OpenCollegePage } from "@/components/share/OpenCollege";
 import { isoDate, nextDateFor } from "@/lib/changes";
 import { setViewedCollege, useViewerTimetable } from "@/lib/cloud";
@@ -289,10 +289,6 @@ export default function MyTimetable() {
           )}
         </div>
 
-        {myId && activeRole === "teacher" && source.kind === "published" && (
-          <MarkLeave code={source.college.code} data={data} teacherId={myId} />
-        )}
-
         {!myId ? (
           <p className="text-lg text-ink-soft">
             Choose your {activeRole === "section" ? "section" : "name"} to see your week. This browser will remember it.
@@ -302,6 +298,7 @@ export default function MyTimetable() {
             {source.kind === "published" && dateIso && myDay.day && (
               <ChangesFeed data={data} me={{ role: activeRole, id: myId }} date={dateIso} upcoming={myDay.upcoming} />
             )}
+            {source.kind === "published" && !myDay.day && myDay.error && <ChangesUnknown error={myDay.error} onRetry={myDay.retry} />}
             {clock && (
               <section className="flex flex-col gap-3 print:hidden" aria-label="Today">
                 <h2 className="text-xl font-bold">Today</h2>
