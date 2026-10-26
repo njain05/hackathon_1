@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, checkCollege, generateTimetable, toApi } from "@/lib/api";
 import { loads, localChecks, type Finding } from "@/lib/checks";
+import { getAdminCollege, readSyncedAt, useAdminAccess } from "@/lib/cloud";
+import { departmentStatus, waitingOn, type DepartmentState, type ReviewState } from "@/lib/departments";
 import { saveTimetable } from "@/lib/result";
 import type { CollegeData, Problem, SolveResult, StepId } from "@/lib/types";
 
@@ -69,6 +71,94 @@ function LoadBars({ title, rows, unit }: { title: string; rows: { id: string; na
   );
 }
 
+/**
+ * The Dean waits for each department's HOD to approve its data before generating
+ * (departments without an HOD don't hold anything up). Also warns when a
+ * department saved changes online that this browser doesn't have yet.
+ */
+function useDepartments() {
+  const access = useAdminAccess();
+  const [all, setAll] = useState<DepartmentState[] | null>(null);
+  const [newerOnline, setNewerOnline] = useState(false);
+  const [checks, setChecks] = useState(0);
+  useEffect(() => {
+    if (!access) return;
+    let live = true;
+    departmentStatus({ admin: access })
+      .then((r) => live && setAll(r))
+      .catch(() => live && setAll(null)); // not online yet, or no departments: nothing to wait for
+    getAdminCollege(access)
+      .then((c) => {
+        const synced = readSyncedAt(access.code);
+        if (live) setNewerOnline(Boolean(c.data_updated_at && synced !== null && Date.parse(c.data_updated_at) > synced));
+      })
+      .catch(() => live && setNewerOnline(false));
+    return () => {
+      live = false;
+    };
+  }, [access, checks]);
+  const used = all?.some((d) => d.needs_approval) ? all : null;
+  return { all: used, waiting: used ? waitingOn(used) : [], newerOnline, refresh: () => setChecks((n) => n + 1) };
+}
+
+const DEAN_TEXT: Record<ReviewState, string> = {
+  draft: "being prepared",
+  submitted: "waiting for the HOD",
+  approved: "approved by the HOD",
+  returned: "sent back to the in-charge",
+};
+
+function DepartmentsGate({ depts, override, setOverride }: { depts: ReturnType<typeof useDepartments>; override: boolean; setOverride: (v: boolean) => void }) {
+  const { all, waiting, newerOnline, refresh } = depts;
+  if (!all && !newerOnline) return null;
+  return (
+    <div className="flex flex-col gap-2 border-b border-line pb-3">
+      {all && (
+        <>
+          <h3 className="font-semibold">
+            {waiting.length === 0
+              ? "✓ Every department's HOD has approved its data."
+              : `Waiting for ${waiting.length === 1 ? "1 department" : `${waiting.length} departments`} to be approved by the HOD`}
+          </h3>
+          <ul className="flex flex-col gap-1 text-sm">
+            {all.map((d) => (
+              <li key={d.department_id}>
+                <span className="font-semibold">{d.department_name}</span>:{" "}
+                {d.needs_approval ? (
+                  <span className={d.state === "approved" ? "text-ok" : d.state === "returned" ? "text-err" : ""}>
+                    {DEAN_TEXT[d.state]}
+                    {d.hod ? ` (HOD: ${d.hod})` : ""}
+                    {d.state === "returned" && d.note ? `: “${d.note}”` : ""}
+                  </span>
+                ) : (
+                  <span className="text-ink-soft">no HOD, so you check it yourself</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-3">
+            {waiting.length > 0 && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} />
+                Generate anyway, without waiting for {waiting.map((d) => d.department_name).join(", ")}
+              </label>
+            )}
+            <button type="button" className="btn-quiet !py-1" onClick={refresh}>
+              Check again
+            </button>
+          </div>
+        </>
+      )}
+      {newerOnline && (
+        <p role="status" className="rounded-md bg-blush px-3 py-2 text-sm">
+          <span className="font-semibold">A department saved changes online after this browser last saved.</span> Reload this page and
+          choose “Use the online copy” to include them before generating.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function StepReview({ data, goTo }: Props) {
   const findings = useMemo(() => localChecks(data), [data]);
   const errors = findings.filter((f) => f.level === "error");
@@ -81,6 +171,8 @@ export default function StepReview({ data, goTo }: Props) {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [result, setResult] = useState<SolveResult | null>(null);
   const [attempt, setAttempt] = useState(0); // "Check again" re-runs the server check
+  const depts = useDepartments();
+  const [override, setOverride] = useState(false);
   const router = useRouter();
   const mounted = useRef(true);
   useEffect(() => {
@@ -111,6 +203,7 @@ export default function StepReview({ data, goTo }: Props) {
   const serverProblems = server?.for === data ? server.problems : null;
   const checking = !errors.length && !serverProblems && !serverError;
   const ready = !errors.length && serverProblems?.length === 0;
+  const held = depts.waiting.length > 0 && !override;
 
   const generate = async () => {
     setGenerating(true);
@@ -206,16 +299,19 @@ export default function StepReview({ data, goTo }: Props) {
       </section>
 
       <section className="flex flex-col gap-3 rounded-md border border-line bg-paper p-4">
+        <DepartmentsGate depts={depts} override={override} setOverride={setOverride} />
         <div className="flex flex-wrap items-center gap-4">
-          <button type="button" className="btn-primary !px-5 !py-3 !text-base" disabled={!ready || generating} onClick={generate}>
+          <button type="button" className="btn-primary !px-5 !py-3 !text-base" disabled={!ready || held || generating} onClick={generate}>
             {generating ? "Generating timetable…" : "Generate timetable"}
           </button>
           <p className="hint" aria-live="polite">
             {generating
               ? "Fitting every class around teachers, rooms and breaks, then checking for clashes. This usually takes 5 to 20 seconds."
-              : ready
-                ? "Usually takes 5 to 20 seconds."
-                : "Available once the checks above pass."}
+              : ready && held
+                ? "Available once every department's HOD has approved, or tick “Generate anyway”."
+                : ready
+                  ? "Usually takes 5 to 20 seconds."
+                  : "Available once the checks above pass."}
           </p>
         </div>
         {generateError && (

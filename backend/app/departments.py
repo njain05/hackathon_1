@@ -1,28 +1,32 @@
 """Departments run their own part of the setup.
 
-- An HOD (or the admin) appoints the department's timetable in-charge: a member
+- An HOD (or the Dean) appoints the department's timetable in-charge: a member
   link with role "incharge". A new one replaces the old.
 - The HOD and in-charge edit only their department's rows in the shared setup
   draft: its rooms, teachers, sections and subjects, the classes of its sections,
   and open electives whose choices are all its own subjects. The server merges
   their rows into the draft and leaves everything else as it is.
-- A department marks itself "ready", so the admin knows when to generate.
+- Review: the in-charge sends the department's data to the HOD; the HOD
+  approves it or sends it back with a note. Changing an approved (or sent)
+  department's rows puts it back to draft. The Dean generates once every
+  department with an HOD is approved (the setup page holds Generate until then).
 - Room sharing: department B asks to use one of department A's rooms; A's HOD
-  (or the admin) approves, which adds B to the room's `shared_with` in the draft.
+  (or the Dean) approves, which adds B to the room's `shared_with` in the draft.
   The solver already lets B's classes and electives use shared rooms.
 
-The admin uses X-Admin-Key; HODs and in-charges use their X-Member-Key.
+The Dean (the college's super admin) uses X-Admin-Key; HODs and in-charges use
+their X-Member-Key. They see only their own department's people.
 """
 
 import json
 import secrets
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast, get_args
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from .colleges import DbSession, check_draft_size, find_college, hash_key
@@ -33,12 +37,18 @@ router = APIRouter(prefix="/colleges", tags=["departments"])
 # ---------- Tables (created with the others on first use) ----------
 
 
-class DepartmentStatus(Base):
-    __tablename__ = "department_status"
+ReviewState = Literal["draft", "submitted", "approved", "returned"]
+REVIEW_STATES = get_args(ReviewState)
+
+
+class DepartmentReview(Base):
+    # A new table (not the old "department_status"), so live databases need no ALTER.
+    __tablename__ = "department_reviews"
 
     college_id: Mapped[int] = mapped_column(ForeignKey("colleges.id", ondelete="CASCADE"), primary_key=True)
     department_id: Mapped[str] = mapped_column(String(80), primary_key=True)
-    ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    state: Mapped[str] = mapped_column(String(20), default="draft")  # ReviewState
+    note: Mapped[str] = mapped_column(String(500), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_by: Mapped[str] = mapped_column(String(120), default="")
 
@@ -66,7 +76,7 @@ class RoomRequest(Base):
 @dataclass
 class Staff:
     college: College
-    member: Member | None  # None = the admin
+    member: Member | None  # None = the Dean (admin link)
 
     @property
     def admin(self) -> bool:
@@ -74,10 +84,10 @@ class Staff:
 
     @property
     def name(self) -> str:
-        return "Admin" if self.member is None else (self.member.name or self.member.role)
+        return "Dean" if self.member is None else (self.member.name or self.member.role)
 
     def runs(self, department_id: str) -> bool:
-        """Admin, or the department's HOD or timetable in-charge."""
+        """The Dean, or the department's HOD or timetable in-charge."""
         m = self.member
         return m is None or (m.role in ("hod", "incharge") and m.department_id == department_id)
 
@@ -105,12 +115,12 @@ def staff_access(
         )
         if member is not None:
             return Staff(college, member)
-    raise HTTPException(403, "This link isn't valid for this college. Open the link you were given, or ask the timetable admin for a new one.")
+    raise HTTPException(403, "This link isn't valid for this college. Open the link you were given, or ask the Dean for a new one.")
 
 
 StaffDep = Annotated[Staff, Depends(staff_access)]
 
-NOT_YOURS = "Only this department's HOD, its timetable in-charge or the admin can do this."
+NOT_YOURS = "Only this department's HOD, its timetable in-charge or the Dean can do this."
 
 
 def must_run(who: Staff, department_id: str) -> None:
@@ -130,7 +140,7 @@ NOUN = {
 def load_draft(session: Session, college: College) -> CollegeDraft:
     draft = session.get(CollegeDraft, college.id)
     if draft is None or not isinstance(draft.data, dict):
-        raise HTTPException(404, f"{college.name} has no setup saved online yet. The admin should save it online first.")
+        raise HTTPException(404, f"{college.name} has no setup saved online yet. The Dean should save it online first.")
     return draft
 
 
@@ -145,14 +155,14 @@ def row_key(collection: str, row: dict[str, Any]) -> str:
 
 
 def owner_of(collection: str, row: dict[str, Any], section_dept: dict[str, str], subject_dept: dict[str, str]) -> str | None:
-    """The department a row belongs to, or None if it is shared (admin only)."""
+    """The department a row belongs to, or None if it is shared (Dean only)."""
     if collection in ("rooms", "teachers", "sections", "subjects"):
         return row.get("department_id")
     if collection == "assignments":
         return section_dept.get(str(row.get("section_id")))
     if collection == "elective_groups":
         depts = {subject_dept.get(str(o.get("subject_id"))) for o in row.get("options") or [] if isinstance(o, dict)}
-        return depts.pop() if len(depts) == 1 else None  # mixed groups belong to the admin
+        return depts.pop() if len(depts) == 1 else None  # mixed groups belong to the Dean
     return None
 
 
@@ -165,6 +175,15 @@ def dept_maps(*datas: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
         for s in d.get("subjects") or []:
             subject_dept.setdefault(str(s.get("id")), s.get("department_id"))
     return section_dept, subject_dept
+
+
+def owned_rows(data: dict[str, Any], dept: str) -> dict[str, list[dict[str, Any]]]:
+    """`dept`'s own rows in each collection, in a stable order (to tell whether they changed)."""
+    sec, sub = dept_maps(data)
+    return {
+        coll: sorted((r for r in data.get(coll) or [] if isinstance(r, dict) and owner_of(coll, r, sec, sub) == dept), key=lambda r: row_key(coll, r))
+        for coll in COLLECTIONS
+    }
 
 
 def merge_department(stored: dict[str, Any], incoming: dict[str, Any], dept: str) -> tuple[dict[str, Any], list[str]]:
@@ -192,7 +211,7 @@ def merge_department(stored: dict[str, Any], incoming: dict[str, Any], dept: str
             owner = owner_of(coll, r, i_sec, i_sub)
             if key in old_owned and owner != dept:
                 mine.append(old_owned[key])  # can't hand a row to another department
-                ignored.append(f"{NOUN[coll].capitalize()} {key} can only be moved to another department by the admin.")
+                ignored.append(f"{NOUN[coll].capitalize()} {key} can only be moved to another department by the Dean.")
             elif owner == dept:
                 if key in other_keys:
                     raise HTTPException(409, f"The code {key} is already used by another department's {NOUN[coll]}. Choose a different code.")
@@ -207,7 +226,7 @@ def merge_department(stored: dict[str, Any], incoming: dict[str, Any], dept: str
 
     for key in ("settings", "room_types", "departments", "name"):
         if key in incoming and incoming.get(key) != stored.get(key):
-            ignored.append("Changes to the week, room types or departments weren't saved: only the admin can change those.")
+            ignored.append("Changes to the week, room types or departments weren't saved: only the Dean can change those.")
             break
     return merged, ignored
 
@@ -227,6 +246,7 @@ class SaveDepartment(BaseModel):
 class SavedDepartment(BaseModel):
     updated_at: datetime
     ignored: list[str] = []
+    reopened: bool = Field(False, description="The department was approved or waiting for the HOD; this change put it back to draft.")
 
 
 def role_of(who: Staff) -> Literal["admin", "hod", "incharge"]:
@@ -258,9 +278,17 @@ def save_department_setup(department_id: str, body: SaveDepartment, who: StaffDe
     if department_id not in departments_of(draft.data):
         raise HTTPException(404, f'There is no department "{department_id}" in the setup.')
     merged, ignored = merge_department(draft.data, body.data, department_id)
+    reopened = False
+    # The HOD approved this data (or is about to): changing it needs a fresh look.
+    # The Dean's own changes don't, as the Dean has the last word anyway.
+    if not who.admin and owned_rows(merged, department_id) != owned_rows(draft.data, department_id):
+        r = session.get(DepartmentReview, (who.college.id, department_id))
+        if r is not None and r.state in ("submitted", "approved"):
+            set_state(r, "draft", who, "Changed after it was sent to the HOD.")
+            reopened = True
     draft.data, draft.updated_at = merged, now()
     session.commit()
-    return SavedDepartment(updated_at=as_utc(draft.updated_at), ignored=list(dict.fromkeys(ignored)))
+    return SavedDepartment(updated_at=as_utc(draft.updated_at), ignored=list(dict.fromkeys(ignored)), reopened=reopened)
 
 
 # ---------- Timetable in-charge ----------
@@ -296,9 +324,9 @@ def get_incharge(department_id: str, who: StaffDep, session: DbSession) -> Incha
 
 @router.post("/{ref}/departments/{department_id}/incharge", response_model=InchargeOut)
 def make_incharge(department_id: str, body: InchargeIn, who: StaffDep, session: DbSession) -> InchargeOut:
-    """HOD or admin: a new timetable in-charge link for the department. The old link stops working."""
+    """HOD or Dean: a new timetable in-charge link for the department. The old link stops working."""
     if not who.heads(department_id):
-        raise HTTPException(403, "Only this department's HOD or the admin can choose its timetable in-charge.")
+        raise HTTPException(403, "Only this department's HOD or the Dean can choose its timetable in-charge.")
     draft = load_draft(session, who.college)
     if department_id not in departments_of(draft.data):
         raise HTTPException(404, f'There is no department "{department_id}" in the setup.')
@@ -315,61 +343,119 @@ def make_incharge(department_id: str, body: InchargeIn, who: StaffDep, session: 
     return InchargeOut(department_id=department_id, name=m.name, since=as_utc(m.created_at), key=key)
 
 
-# ---------- Ready flags ----------
+# ---------- Review: in-charge sends, HOD approves, Dean generates ----------
 
 
 class DepartmentState(BaseModel):
     department_id: str
     department_name: str
-    ready: bool
+    state: ReviewState
+    note: str = Field("", description="The HOD's note when sending the data back (own department only).")
     updated_at: datetime | None
-    updated_by: str
-    hod: str | None
-    incharge: str | None
+    updated_by: str = Field("", description="Who last changed the state (own department only).")
+    hod: str | None = Field(None, description="Own department only, unless the Dean is asking.")
+    incharge: str | None = Field(None, description="Own department only, unless the Dean is asking.")
+    needs_approval: bool = Field(description="It has an HOD, so the Dean waits for the HOD's approval before generating.")
 
 
-class ReadyIn(BaseModel):
-    ready: bool
+class SubmitIn(BaseModel):
+    note: str = Field("", max_length=500)
+
+
+class ReviewIn(BaseModel):
+    approve: bool
+    note: str = Field("", max_length=500)
+
+
+def review_of(session: Session, college: College, department_id: str) -> DepartmentReview:
+    r = session.get(DepartmentReview, (college.id, department_id))
+    if r is None:
+        r = DepartmentReview(college_id=college.id, department_id=department_id, state="draft", note="", updated_by="")
+        session.add(r)
+    return r
+
+
+def set_state(r: DepartmentReview, state: ReviewState, who: Staff, note: str = "") -> None:
+    r.state, r.note, r.updated_at, r.updated_by = state, note.strip(), now(), who.name
+
+
+def department_people(session: Session, college: College) -> list[Member]:
+    return list(session.scalars(
+        select(Member).where(Member.college_id == college.id, Member.revoked_at.is_(None), Member.role.in_(("hod", "incharge")))
+    ).all())
+
+
+def state_out(dept: str, name: str, r: DepartmentReview | None, people: list[Member], who: Staff) -> DepartmentState:
+    """An HOD or in-charge sees other departments' progress, but not their people or notes."""
+    own = who.runs(dept)
+
+    def person(role: str) -> str | None:
+        return next((p.name for p in people if p.department_id == dept and p.role == role), None)
+
+    return DepartmentState(
+        department_id=dept, department_name=name or dept,
+        state=cast(ReviewState, r.state) if r and r.state in REVIEW_STATES else "draft",
+        note=(r.note if r else "") if own else "",
+        updated_at=as_utc(r.updated_at) if r else None,
+        updated_by=(r.updated_by if r else "") if own else "",
+        hod=person("hod") if own else None,
+        incharge=person("incharge") if own else None,
+        needs_approval=any(p.department_id == dept and p.role == "hod" for p in people),
+    )
+
+
+def checked_department(session: Session, who: Staff, department_id: str) -> str:
+    names = departments_of(load_draft(session, who.college).data)
+    if department_id not in names:
+        raise HTTPException(404, f'There is no department "{department_id}" in the setup.')
+    return names[department_id]
 
 
 @router.get("/{ref}/departments/status", response_model=list[DepartmentState])
 def department_status(who: StaffDep, session: DbSession) -> list[DepartmentState]:
-    """Every department: ready or not, and who runs it. Any HOD, in-charge or the admin may look."""
+    """Every department's review state. The Dean sees who runs each one; an HOD or in-charge only their own."""
     if who.member is not None and who.member.role not in ("hod", "incharge"):
         raise HTTPException(403, NOT_YOURS)
     draft = load_draft(session, who.college)
-    rows = {s.department_id: s for s in session.scalars(select(DepartmentStatus).where(DepartmentStatus.college_id == who.college.id))}
-    people = session.scalars(
-        select(Member).where(Member.college_id == who.college.id, Member.revoked_at.is_(None), Member.role.in_(("hod", "incharge")))
-    ).all()
-    out = []
-    for dept, name in departments_of(draft.data).items():
-        st = rows.get(dept)
-        out.append(DepartmentState(
-            department_id=dept, department_name=name or dept, ready=bool(st and st.ready),
-            updated_at=as_utc(st.updated_at) if st else None, updated_by=st.updated_by if st else "",
-            hod=next((p.name for p in people if p.department_id == dept and p.role == "hod"), None),
-            incharge=next((p.name for p in people if p.department_id == dept and p.role == "incharge"), None),
-        ))
-    return out
+    rows = {r.department_id: r for r in session.scalars(select(DepartmentReview).where(DepartmentReview.college_id == who.college.id))}
+    people = department_people(session, who.college)
+    return [state_out(dept, name, rows.get(dept), people, who) for dept, name in departments_of(draft.data).items()]
 
 
-@router.put("/{ref}/departments/{department_id}/ready", response_model=DepartmentState)
-def set_ready(department_id: str, body: ReadyIn, who: StaffDep, session: DbSession) -> DepartmentState:
+@router.post("/{ref}/departments/{department_id}/submit", response_model=DepartmentState)
+def submit_department(department_id: str, body: SubmitIn, who: StaffDep, session: DbSession) -> DepartmentState:
+    """The in-charge (or HOD) sends the department's data to the HOD for approval."""
     must_run(who, department_id)
-    names = departments_of(load_draft(session, who.college).data)
-    if department_id not in names:
-        raise HTTPException(404, f'There is no department "{department_id}" in the setup.')
-    st = session.get(DepartmentStatus, (who.college.id, department_id))
-    if st is None:
-        st = DepartmentStatus(college_id=who.college.id, department_id=department_id)
-        session.add(st)
-    st.ready, st.updated_at, st.updated_by = body.ready, now(), who.name
+    name = checked_department(session, who, department_id)
+    r = review_of(session, who.college, department_id)
+    if r.state == "approved":
+        raise HTTPException(409, f"{name or department_id} is already approved by the HOD.")
+    if r.state == "submitted":
+        raise HTTPException(409, f"{name or department_id} is already waiting for the HOD's approval.")
+    set_state(r, "submitted", who, body.note)
     session.commit()
-    return DepartmentState(
-        department_id=department_id, department_name=names[department_id] or department_id, ready=st.ready,
-        updated_at=as_utc(st.updated_at), updated_by=st.updated_by, hod=None, incharge=None,
-    )
+    return state_out(department_id, name, r, department_people(session, who.college), who)
+
+
+@router.post("/{ref}/departments/{department_id}/review", response_model=DepartmentState)
+def review_department(department_id: str, body: ReviewIn, who: StaffDep, session: DbSession) -> DepartmentState:
+    """The department's HOD (or the Dean) approves its data, or sends it back with a note saying what to fix."""
+    if not who.heads(department_id):
+        raise HTTPException(403, "Only this department's HOD or the Dean can approve its data.")
+    name = checked_department(session, who, department_id)
+    r = review_of(session, who.college, department_id)
+    if body.approve:
+        if r.state == "approved":
+            raise HTTPException(409, f"{name or department_id} is already approved.")
+        set_state(r, "approved", who, body.note)
+    else:
+        if r.state not in ("submitted", "approved"):
+            raise HTTPException(409, f"{name or department_id} hasn't been sent for approval, so there is nothing to send back.")
+        if not body.note.strip():
+            raise HTTPException(422, "Write a short note saying what to fix, so the in-charge knows.")
+        set_state(r, "returned", who, body.note)
+    session.commit()
+    return state_out(department_id, name, r, department_people(session, who.college), who)
 
 
 # ---------- Room sharing ----------
@@ -449,7 +535,7 @@ def request_room(body: RoomRequestIn, who: StaffDep, session: DbSession) -> Room
 
 @router.get("/{ref}/room-requests", response_model=list[RoomRequestOut])
 def list_room_requests(who: StaffDep, session: DbSession) -> list[RoomRequestOut]:
-    """Admin: all. HOD / in-charge: requests for their department's rooms and the ones it sent."""
+    """Dean: all. HOD / in-charge: requests for their department's rooms and the ones it sent."""
     data = load_draft(session, who.college).data
     q = select(RoomRequest).where(RoomRequest.college_id == who.college.id)
     if who.member is not None:
@@ -463,12 +549,12 @@ def list_room_requests(who: StaffDep, session: DbSession) -> list[RoomRequestOut
 
 @router.post("/{ref}/room-requests/{request_id}/decide", response_model=RoomRequestOut)
 def decide_room_request(request_id: int, body: DecisionIn, who: StaffDep, session: DbSession) -> RoomRequestOut:
-    """The room's HOD (or the admin) approves or rejects. Approving shares the room in the setup."""
+    """The room's HOD (or the Dean) approves or rejects. Approving shares the room in the setup."""
     r = session.get(RoomRequest, request_id)
     if r is None or r.college_id != who.college.id:
         raise HTTPException(404, "No such room request.")
     if not who.heads(r.owner_department):
-        raise HTTPException(403, f"Only {r.owner_department}'s HOD or the admin can decide on its rooms.")
+        raise HTTPException(403, f"Only {r.owner_department}'s HOD or the Dean can decide on its rooms.")
     if r.status != "pending":
         raise HTTPException(409, f"This request was already {r.status}.")
     draft = load_draft(session, who.college)

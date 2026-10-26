@@ -60,7 +60,7 @@ def test_hod_appoints_incharge_who_edits_only_their_department(sample_result: So
     saved = client.put(f"/colleges/{c['code']}/departments/CSE/setup", json={"data": data}, headers=incharge)
     assert saved.status_code == 200, saved.text
     notes = " ".join(saved.json()["ignored"])
-    assert "teachers" in notes and "only the admin" in notes
+    assert "teachers" in notes and "only the Dean" in notes
 
     after = client.get(f"/colleges/{c['code']}/admin", headers=c["admin"]).json()["data"]
     names = {t["id"]: t["name"] for t in after["teachers"]}
@@ -105,15 +105,93 @@ def test_new_incharge_link_replaces_the_old_and_only_hod_or_admin_can_appoint(sa
     assert client.get(f"/colleges/{c['code']}/departments/CSE/setup", headers={"X-Member-Key": "nonsense"}).status_code == 403
 
 
-def test_departments_mark_themselves_ready(sample_result: SolveResult) -> None:
+def status_of(code: str, headers: dict[str, str]) -> dict[str, dict[str, Any]]:
+    res = client.get(f"/colleges/{code}/departments/status", headers=headers)
+    assert res.status_code == 200, res.text
+    return {s["department_id"]: s for s in res.json()}
+
+
+def test_incharge_sends_to_hod_who_approves_or_sends_back(sample_result: SolveResult) -> None:
     c = setup_college(sample_result)
-    incharge = make_incharge(c["code"], c["hod"]["CSE"])
-    res = client.put(f"/colleges/{c['code']}/departments/CSE/ready", json={"ready": True}, headers=incharge)
-    assert res.status_code == 200 and res.json()["ready"] is True
-    assert client.put(f"/colleges/{c['code']}/departments/ECE/ready", json={"ready": True}, headers=incharge).status_code == 403
-    status = {s["department_id"]: s for s in client.get(f"/colleges/{c['code']}/departments/status", headers=c["admin"]).json()}
-    assert status["CSE"]["ready"] is True and status["ECE"]["ready"] is False
-    assert status["CSE"]["hod"] == "Dr. CSE Head" and status["CSE"]["incharge"] == "Prof. Rajesh Kumar"
+    code = c["code"]
+    incharge = make_incharge(code, c["hod"]["CSE"])
+    base = f"/colleges/{code}/departments/CSE"
+
+    assert status_of(code, c["admin"])["CSE"]["state"] == "draft"
+    # The in-charge can't approve, nor can another department's HOD; nothing to send back yet.
+    assert client.post(f"{base}/review", json={"approve": True}, headers=incharge).status_code == 403
+    assert client.post(f"{base}/review", json={"approve": True}, headers=c["hod"]["ECE"]).status_code == 403
+    assert client.post(f"{base}/review", json={"approve": False, "note": "x"}, headers=c["hod"]["CSE"]).status_code == 409
+
+    sent = client.post(f"{base}/submit", json={}, headers=incharge)
+    assert sent.status_code == 200 and sent.json()["state"] == "submitted"
+    assert client.post(f"{base}/submit", json={}, headers=incharge).status_code == 409
+    # Sending back needs a note saying what to fix.
+    assert client.post(f"{base}/review", json={"approve": False}, headers=c["hod"]["CSE"]).status_code == 422
+    back = client.post(f"{base}/review", json={"approve": False, "note": "Add the CS301 lab"}, headers=c["hod"]["CSE"])
+    assert back.status_code == 200 and back.json()["state"] == "returned" and back.json()["note"] == "Add the CS301 lab"
+
+    assert client.post(f"{base}/submit", json={}, headers=incharge).json()["state"] == "submitted"
+    ok = client.post(f"{base}/review", json={"approve": True}, headers=c["hod"]["CSE"])
+    assert ok.status_code == 200 and ok.json()["state"] == "approved" and ok.json()["updated_by"] == "Dr. CSE Head"
+    assert client.post(f"{base}/submit", json={}, headers=incharge).status_code == 409
+
+    dean = status_of(code, c["admin"])
+    assert dean["CSE"]["state"] == "approved" and dean["ECE"]["state"] == "draft"
+    # Both departments have an HOD, so the Dean waits for both.
+    assert dean["CSE"]["needs_approval"] and dean["ECE"]["needs_approval"]
+
+
+def test_changing_approved_data_puts_it_back_to_draft(sample_result: SolveResult) -> None:
+    c = setup_college(sample_result)
+    code = c["code"]
+    incharge = make_incharge(code, c["hod"]["CSE"])
+    base = f"/colleges/{code}/departments/CSE"
+    client.post(f"{base}/review", json={"approve": True}, headers=c["hod"]["CSE"])  # the HOD may approve a draft directly
+    data = client.get(f"{base}/setup", headers=incharge).json()["data"]
+
+    # Saving with no real change keeps the approval.
+    same = client.put(f"{base}/setup", json={"data": data}, headers=incharge)
+    assert same.status_code == 200 and same.json()["reopened"] is False
+    assert status_of(code, c["admin"])["CSE"]["state"] == "approved"
+
+    # A change to another department's rows is ignored, so it doesn't count either.
+    for t in data["teachers"]:
+        if t["id"] == "BS":
+            t["name"] = "Changed by CSE"
+    assert client.put(f"{base}/setup", json={"data": data}, headers=incharge).json()["reopened"] is False
+
+    for t in data["teachers"]:
+        if t["id"] == "HK":
+            t["max_periods_per_day"] = 4
+    changed = client.put(f"{base}/setup", json={"data": data}, headers=incharge)
+    assert changed.json()["reopened"] is True
+    assert status_of(code, c["admin"])["CSE"]["state"] == "draft"
+
+    # The Dean's own changes don't undo an HOD's approval.
+    client.post(f"{base}/review", json={"approve": True}, headers=c["hod"]["CSE"])
+    for t in data["teachers"]:
+        if t["id"] == "HK":
+            t["max_periods_per_day"] = 5
+    assert client.put(f"{base}/setup", json={"data": data}, headers=c["admin"]).json()["reopened"] is False
+    assert status_of(code, c["admin"])["CSE"]["state"] == "approved"
+
+
+def test_status_shows_other_departments_progress_but_not_their_people(sample_result: SolveResult) -> None:
+    c = setup_college(sample_result)
+    code = c["code"]
+    make_incharge(code, c["hod"]["CSE"])
+    client.post(f"/colleges/{code}/departments/ECE/review", json={"approve": True, "note": "Looks right"}, headers=c["hod"]["ECE"])
+
+    dean = status_of(code, c["admin"])
+    assert dean["CSE"]["hod"] == "Dr. CSE Head" and dean["CSE"]["incharge"] == "Prof. Rajesh Kumar"
+    assert dean["ECE"]["hod"] == "Dr. ECE Head" and dean["ECE"]["updated_by"] == "Dr. ECE Head"
+
+    cse = status_of(code, c["hod"]["CSE"])
+    assert cse["CSE"]["hod"] == "Dr. CSE Head" and cse["CSE"]["incharge"] == "Prof. Rajesh Kumar"
+    assert cse["ECE"]["state"] == "approved"  # progress is fine to see
+    assert cse["ECE"]["hod"] is None and cse["ECE"]["incharge"] is None
+    assert cse["ECE"]["updated_by"] == "" and cse["ECE"]["note"] == ""
 
 
 def test_room_sharing_needs_the_owning_hods_approval(sample_result: SolveResult) -> None:

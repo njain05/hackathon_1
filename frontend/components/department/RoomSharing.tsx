@@ -9,7 +9,7 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyl
 
 /**
  * Room sharing for one department: ask another department for one of its rooms,
- * see what was asked, and (HOD or admin) approve or reject requests for its own rooms.
+ * see what was asked, and (HOD or Dean) approve or reject requests for its own rooms.
  */
 export default function RoomSharing({
   staff,
@@ -22,7 +22,7 @@ export default function RoomSharing({
   dept: string;
   /** The setup, to list other departments' rooms. */
   data: CollegeData | null;
-  /** The department's HOD or the admin. */
+  /** The department's HOD or the Dean. */
   canDecide: boolean;
   /** Called after an approval changes the setup (so the caller can reload it). */
   onShared?: () => void;

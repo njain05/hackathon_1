@@ -5,7 +5,7 @@ import { CopyField } from "@/components/share/CloudSave";
 import { ApiError } from "@/lib/api";
 import { getIncharge, inchargeLink, makeIncharge, staffCode, staffId, type InchargeOut, type Staff } from "@/lib/departments";
 
-/** HOD (or admin): choose the teacher who makes this department's timetable, and give them their link. */
+/** HOD (or Dean): choose the teacher who makes this department's timetable, and give them their link. */
 export default function InchargeLink({
   staff,
   dept,
@@ -54,7 +54,7 @@ export default function InchargeLink({
         Timetable in-charge for {dept}
       </h2>
       <p className="hint max-w-2xl">
-        The in-charge enters {dept}&apos;s rooms, teachers, sections and subjects, and marks the department ready. They can&apos;t change
+        The in-charge enters {dept}&apos;s rooms, teachers, sections and subjects, and sends them to you for approval. They can&apos;t change
         other departments.
       </p>
       <p>{current?.name ? <>Now: <span className="font-semibold">{current.name}</span></> : "No in-charge yet."}</p>
