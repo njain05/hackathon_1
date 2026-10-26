@@ -36,13 +36,14 @@ class Context:
 # ---------- Words for times, days and names ----------
 
 
-def period_times(data: CollegeData) -> dict[int, tuple[int, int]]:
-    """Period → (start, end) in minutes since midnight, from the college's own settings."""
+def period_times(data: CollegeData, day: str | None = None) -> dict[int, tuple[int, int]]:
+    """Period → (start, end) in minutes since midnight, from the college's own settings.
+    With `day`, only that day's periods (a short day, e.g. a 4-period Saturday, stops early)."""
     s = data.settings
     h, m = (int(x) for x in s.day_start.split(":"))
     t, out = h * 60 + m, {}
     breaks = {b.after_period: b.minutes for b in s.breaks}
-    for p in range(1, s.periods_per_day + 1):
+    for p in range(1, (s.periods_on(day) if day else s.periods_per_day) + 1):
         length = s.period_lengths[p - 1] if s.period_lengths else s.period_minutes
         out[p] = (t, t + length)
         t += length + breaks.get(p, 0)
@@ -128,6 +129,8 @@ def involves(e: Entry, kind: str, id_: str) -> bool:
 def describe(data: CollegeData, e: Entry, kind: str) -> str:
     n = names(data)
     what = n["subject"].get(e.subject_id, e.subject_id) + (" (lab)" if e.kind == "lab" else " (elective option)" if e.kind == "elective" else "")
+    if e.batch:
+        what += f" for batch {e.batch}"
     other = n["section"].get(e.section_id, e.section_id) if kind == "teacher" else n["teacher"].get(e.teacher_id, e.teacher_id)
     return f"{what} — {other} — {n['room'].get(e.room_id, e.room_id)}"
 
@@ -138,7 +141,7 @@ def blocks(entries: list[Entry]) -> list[tuple[int, int, list[Entry]]]:
     for e in sorted(entries, key=lambda x: (x.period, x.subject_id, x.room_id)):
         by_p.setdefault(e.period, []).append(e)
     out: list[tuple[int, int, list[Entry]]] = []
-    key = lambda es: sorted((x.subject_id, x.teacher_id, x.room_id, x.section_id) for x in es)  # noqa: E731
+    key = lambda es: sorted((x.subject_id, x.teacher_id, x.room_id, x.section_id, x.batch or "") for x in es)  # noqa: E731
     for p in sorted(by_p):
         if out and out[-1][1] == p - 1 and key(out[-1][2]) == key(by_p[p]) and by_p[p][0].kind != "lecture":
             out[-1] = (out[-1][0], p, out[-1][2])
@@ -218,8 +221,10 @@ def free_rooms(ctx: Context, day: str, period: int) -> str:
     d = resolve_date(ctx, day)
     if isinstance(d, str):
         return d
-    if period not in period_times(ctx.data):
-        return f"There is no period {period}. Periods run 1 to {ctx.data.settings.periods_per_day}."
+    day_name, _ = college_day(ctx.data, d)
+    n = ctx.data.settings.periods_on(day_name)
+    if not 1 <= period <= n:
+        return f"There is no period {period} on {day_label(ctx, d)}. Periods run 1 to {n} that day."
     uses = {t.id: t.use for t in ctx.data.room_types}
     used = {e.room_id for e in ctx.day(d) if e.period == period}
     free = [r for r in ctx.data.rooms if uses.get(r.type) != "event" and r.id not in used]
@@ -248,7 +253,7 @@ def teacher_free_slots(ctx: Context, teacher: str, day: str) -> str:
     off = {s.period for s in t.unavailable if s.day == day_name}
     busy = {e.period: e for e in ctx.day(d) if e.teacher_id == id_}
     free, taken = [], []
-    for p in period_times(ctx.data):
+    for p in period_times(ctx.data, day_name):
         if p in busy:
             taken.append(f"{when(ctx.data, p, p)} teaching {names(ctx.data)['section'].get(busy[p].section_id, busy[p].section_id)}")
         elif p in off:

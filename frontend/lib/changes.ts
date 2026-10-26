@@ -73,6 +73,8 @@ export interface AffectedClass {
   end_period: number;
   room_id: string;
   class_kind: "lecture" | "lab";
+  /** A lab batch (e.g. "A1") when the section's labs run per batch. */
+  batch?: string | null;
   state: "awaiting_approval" | "needs_cover" | "substitute" | "cancelled";
   change_id: number | null;
   new_teacher_id: string | null;

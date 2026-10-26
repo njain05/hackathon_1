@@ -8,7 +8,7 @@ times. The client is passed in, so tests use a fake one.
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from .tools import TOOLS, Context, day_label, hhmm, period_times, run_tool
+from .tools import TOOLS, Context, college_day, day_label, hhmm, period_times, run_tool
 
 MODEL = "claude-haiku-5-5"
 MAX_TOKENS = 2048  # per call: room for brief thinking plus a short answer
@@ -44,7 +44,8 @@ REFUSED = "I can only help with questions about the timetable, rooms and halls."
 
 
 def system_prompt(ctx: Context) -> str:
-    times = period_times(ctx.data)
+    day_name, _ = college_day(ctx.data, ctx.today)
+    times = period_times(ctx.data, day_name)
     period_now = next((p for p, (a, b) in times.items() if a <= ctx.now_minutes < b), None)
     now = f"{day_label(ctx, ctx.today)}, {hhmm(ctx.now_minutes)}" + (f" (period {period_now})" if period_now else "")
     me = ""

@@ -114,12 +114,14 @@ function LeaveForm({ data, admin, date, onDone }: { data: CollegeData; admin: Ad
 }
 
 /** One class a leave affects: assign a ranked substitute, or cancel it. */
-function ClassCover({ cls, data, admin, date, leaveId, onDone }: {
+function ClassCover({ cls, data, admin, date, leaveId, teacherId, onDone }: {
   cls: AffectedClass;
   data: CollegeData;
   admin: AdminAccess;
   date: string;
   leaveId: number;
+  /** The teacher on leave: their class only, when two lab batches share the slot. */
+  teacherId: string;
   onDone: () => void;
 }) {
   const n = names(data);
@@ -139,7 +141,9 @@ function ClassCover({ cls, data, admin, date, leaveId, onDone }: {
       setBusy(false);
     }
   };
-  const base = { date, section_id: cls.section_id, start_period: cls.start_period, end_period: cls.end_period, leave_id: leaveId };
+  const base = {
+    date, section_id: cls.section_id, start_period: cls.start_period, end_period: cls.end_period, leave_id: leaveId, teacher_id: teacherId,
+  };
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-line bg-cream p-3">
@@ -148,6 +152,7 @@ function ClassCover({ cls, data, admin, date, leaveId, onDone }: {
           <span className="font-semibold">
             {cls.section_id} · {n.subject(cls.subject_id)}
             {cls.class_kind === "lab" ? " lab" : ""}
+            {cls.batch ? ` (batch ${cls.batch})` : ""}
           </span>{" "}
           <span className="text-ink-soft">
             {periodText(data, cls.start_period, cls.end_period)} · {n.room(cls.room_id)}
@@ -537,6 +542,7 @@ export default function DailyChanges() {
                               admin={admin}
                               date={date}
                               leaveId={lv.id}
+                              teacherId={lv.teacher_id}
                               onDone={refresh}
                             />
                           ))}

@@ -3,6 +3,16 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: Short days and lab batches in the daily features** (after P1's P7 solver, `fdbe243`)
+  - Every daily feature uses the day's own period count (`settings.periods_on(day)`), so a 4-period Saturday never offers period 5:
+    - the helper (free rooms, teacher free periods, hall slots, "period now");
+    - leave (whole day = periods 1–4), extra-class slots, and hall availability and booking.
+  - **Cover for one lab batch leaves the other batch alone**:
+    - a substitute or cancellation now applies only to the absent teacher's class in that slot (the change already stores that teacher);
+    - the Changes page sends whose class it is and shows "(batch A1)";
+    - no database change needed.
+  - The helper shows "for batch A1" in schedules and keeps parallel batch labs apart.
+  - 2 new tests (85 total, all pass): short-day limits across booking, leave, extra slots and the helper; batch-only substitute and cancel.
 - **2026-10-27: P5 Ask the timetable (Claude helper)**
   - **`backend/assistant/`** (pure like `solver/`: no FastAPI or database):
     - `tools.py`: six tools over the real data: `get_schedule(who, day)`, `whats_next(who, now)`, `free_rooms(day, period)`, `teacher_free_slots(teacher, day)`, `hall_free_slots(room, day)`, `explain_problems()`;

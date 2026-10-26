@@ -86,7 +86,11 @@ class ChangeIn(BaseModel):
     end_period: int | None = Field(None, ge=1, description="Defaults to start_period")
     new_teacher_id: str | None = Field(None, description="substitute: who takes the class")
     subject_id: str | None = Field(None, description="extra: which subject")
-    teacher_id: str | None = Field(None, description="extra: who teaches it (default: the assigned teacher)")
+    teacher_id: str | None = Field(
+        None,
+        description="extra: who teaches it (default: the assigned teacher). substitute/cancel: whose class it is "
+        "(needed when two lab batches of the section share the slot with different teachers)",
+    )
     room_id: str | None = Field(None, description="extra: which room")
     note: str = Field("", max_length=300)
     leave_id: int | None = None
@@ -132,6 +136,7 @@ class AffectedClass(BaseModel):
     end_period: int
     room_id: str
     class_kind: str
+    batch: str | None = None
     state: Literal["awaiting_approval", "needs_cover", "substitute", "cancelled"]
     change_id: int | None = None
     new_teacher_id: str | None = None
@@ -206,7 +211,8 @@ def actual(day: Day, changes: list[DayChange] | None = None) -> list[Entry]:
     """The published entries for this weekday with the changes applied, in order."""
     es = [e for e in day.base if e.day == day.day] if day.working else []
     for c in day.changes if changes is None else changes:
-        hit = lambda e, c=c: e.section_id == c.section_id and e.period in span(c)  # noqa: E731
+        # Only that teacher's class: two lab batches of one section may share the slot with different teachers.
+        hit = lambda e, c=c: e.section_id == c.section_id and e.period in span(c) and e.teacher_id == c.teacher_id  # noqa: E731
         if c.kind == "cancel":
             es = [e for e in es if not hit(e)]
         elif c.kind == "substitute":
@@ -284,7 +290,8 @@ def classes_of(entries: list[Entry], teacher_id: str, periods: range) -> list[tu
     blocks: list[tuple[Entry, int, int]] = []
     for e in mine:
         last = blocks[-1] if blocks else None
-        if last and last[0].kind == "lab" == e.kind and last[0].section_id == e.section_id and last[0].subject_id == e.subject_id and last[2] == e.period - 1:
+        if (last and last[0].kind == "lab" == e.kind and last[0].section_id == e.section_id and last[0].subject_id == e.subject_id
+                and last[0].batch == e.batch and last[2] == e.period - 1):
             blocks[-1] = (last[0], last[1], e.period)
         else:
             blocks.append((e, e.period, e.period))
@@ -326,7 +333,7 @@ def check_date(d: date) -> None:
 
 
 def periods_of(day: Day, start: int | None, end: int | None) -> range:
-    n = day.data.settings.periods_per_day
+    n = day.data.settings.periods_on(day.day)  # a short day (e.g. a 4-period Saturday) has fewer
     a, b = start or 1, end or (start if start and end is None else n)
     if not 1 <= a <= b <= n:
         raise HTTPException(400, f"Choose periods between 1 and {n}, the last one after the first.")
@@ -478,7 +485,7 @@ def cover(college: AdminCollegeDep, session: DbSession, on: Annotated[date, Quer
             periods = range(a, b + 1)
             done = next((c for c in day.changes if c.kind in ("substitute", "cancel") and c.section_id == e.section_id and set(span(c)) & set(periods)), None)
             classes.append(AffectedClass(
-                section_id=e.section_id, subject_id=e.subject_id, start_period=a, end_period=b, room_id=e.room_id,
+                section_id=e.section_id, subject_id=e.subject_id, start_period=a, end_period=b, room_id=e.room_id, batch=e.batch,
                 class_kind=e.kind,
                 state=("awaiting_approval" if lv.status == "pending" else "needs_cover") if done is None
                 else "substitute" if done.kind == "substitute" else "cancelled",
@@ -522,7 +529,7 @@ def extra_slots(
     )
     t = next(x for x in data.teachers if x.id == teacher_id)
     out: list[SlotOption] = []
-    for p in range(1, data.settings.periods_per_day + 1):
+    for p in range(1, data.settings.periods_on(day.day) + 1):
         here = [e for e in entries if e.period == p]
         reason = None
         if any(e.section_id == section_id for e in here):
@@ -562,12 +569,16 @@ def add_change(body: ChangeIn, college: AdminCollegeDep, session: DbSession) -> 
     entries = actual(day)
     replaced: list[DayChange] = []
     if body.kind in ("substitute", "cancel"):
-        # The class as it stands: it must exist in every one of these periods.
-        found = [e for e in entries if e.section_id == body.section_id and e.period in periods]
+        usual = body.teacher_id  # whose class, when batches share the slot
+
+        def theirs(e: Entry) -> bool:
+            return e.section_id == body.section_id and e.period in periods and usual in (None, e.teacher_id)
+
         # A substitute or cancellation already made for this class is replaced (changing your mind).
-        replaced = [c for c in day.changes if c.kind in ("substitute", "cancel") and c.section_id == body.section_id and set(span(c)) & set(periods)]
-        if replaced:
-            found = [e for e in actual(day, [c for c in day.changes if c not in replaced]) if e.section_id == body.section_id and e.period in periods]
+        replaced = [c for c in day.changes if c.kind in ("substitute", "cancel") and c.section_id == body.section_id
+                    and set(span(c)) & set(periods) and usual in (None, c.teacher_id)]
+        # The class as it stands (before any cover it replaces): it must exist in every one of these periods.
+        found = [e for e in (actual(day, [c for c in day.changes if c not in replaced]) if replaced else entries) if theirs(e)]
         if len({e.period for e in found}) != len(periods) or len({(e.subject_id, e.teacher_id) for e in found}) != 1:
             raise HTTPException(400, "There's no single class for this section in these periods. Pick the class from the list.")
         e = found[0]

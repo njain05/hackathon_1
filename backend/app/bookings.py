@@ -169,6 +169,12 @@ def working_day(data: dict[str, Any], d: date) -> str | None:
     return next((x for x in data["settings"]["days"] if x.strip().lower()[:3] == weekday[:3]), None)
 
 
+def periods_on(data: dict[str, Any], d: date) -> int:
+    """How many periods this date has: a short day (settings.periods_by_day) has fewer."""
+    s, day = data["settings"], working_day(data, d)
+    return (s.get("periods_by_day") or {}).get(day, s["periods_per_day"]) if day else s["periods_per_day"]
+
+
 def busy_periods(
     session: Session, college: College, pub: dict[str, Any], room_id: str, d: date,
     *, ignore: int | None = None, approved_only: bool = False,
@@ -281,7 +287,7 @@ def availability(ref: str, session: DbSession, room_id: str, on: Annotated[date,
     if room_id not in event_rooms(pub["data"]):
         raise HTTPException(404, f"\"{room_id}\" isn't a hall or room that can be booked for events.")
     busy = busy_periods(session, college, pub, room_id, on)
-    n = pub["data"]["settings"]["periods_per_day"]
+    n = periods_on(pub["data"], on)
     return Availability(
         room_id=room_id, date=on, day=working_day(pub["data"], on),
         periods=[PeriodSlot(period=p, free=p not in busy, reason=busy.get(p)) for p in range(1, n + 1)],  # type: ignore[arg-type]
@@ -302,7 +308,7 @@ def request_booking(ref: str, body: NewBooking, session: DbSession) -> BookingOu
         raise HTTPException(400, "That date has passed. Choose today or a later date.")
     if body.date > today() + timedelta(days=MAX_DAYS_AHEAD):
         raise HTTPException(400, "Bookings open up to a year ahead. Choose an earlier date.")
-    n = pub["data"]["settings"]["periods_per_day"]
+    n = periods_on(pub["data"], body.date)
     if body.end_period < body.start_period or body.end_period > n:
         raise HTTPException(400, f"Choose periods between 1 and {n}, with the last one after the first.")
     if body.attendees > room["capacity"]:

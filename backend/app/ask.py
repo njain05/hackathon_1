@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from assistant import Context, answer
 from assistant.chat import ClaudeClient
-from assistant.tools import names, when
+from assistant.tools import college_day, names, when
 from solver import CollegeData
 from solver.models import Entry
 
@@ -163,7 +163,8 @@ def build_context(session: Any, college: Any, body: AskIn) -> Context:
 
     def hall_slots(room_id: str, d: date) -> list[tuple[int, str | None]]:
         busy = busy_periods(session, college, raw, room_id, d)
-        return [(p, reasons.get(busy[p], busy[p]) if p in busy else None) for p in range(1, data.settings.periods_per_day + 1)]
+        n = data.settings.periods_on(college_day(data, d)[0])  # a short day has fewer periods
+        return [(p, reasons.get(busy[p], busy[p]) if p in busy else None) for p in range(1, n + 1)]
 
     return Context(
         data=data, today=local.date(), now_minutes=local.hour * 60 + local.minute,
