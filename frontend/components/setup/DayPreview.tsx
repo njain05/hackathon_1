@@ -18,7 +18,13 @@ export default function DayPreview({ settings }: { settings: Settings }) {
           {formatTime(start)} to {formatTime(end)}, {settings.periods_per_day} periods
         </span>
       </figcaption>
-      <ol className="flex h-24 w-full overflow-hidden rounded border border-line" aria-label="Periods and breaks in a day">
+      {/* On a phone the strip scrolls sideways rather than cutting off the clock times. */}
+      <div className="overflow-x-auto">
+      <ol
+        className="flex h-24 w-full overflow-hidden rounded border border-line"
+        style={{ minWidth: `${blocks.length * 3.5}rem` }}
+        aria-label="Periods and breaks in a day"
+      >
         {blocks.map((b, i) => (
           <li
             key={i}
@@ -35,6 +41,7 @@ export default function DayPreview({ settings }: { settings: Settings }) {
           </li>
         ))}
       </ol>
+      </div>
       <p className="mt-2 text-xs text-ink-soft">
         {teachingHours} hours of teaching a day
         {settings.days.length ? `, ${settings.days.length} days a week.` : ". No working days chosen yet."}

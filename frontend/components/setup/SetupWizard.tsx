@@ -223,10 +223,8 @@ export default function SetupWizard() {
     <div className="flex min-h-full flex-col">
       <AppNav collegeName={data.name} />
       <header className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
-        <div className="mr-auto min-w-0">
-          <p className="text-sm text-ink-soft">Timetable setup</p>
-          <p className="truncate text-lg font-bold">{data.name || "Your college"}</p>
-        </div>
+        {/* The college name is already in the menu bar above. */}
+        <p className="mr-auto text-sm font-semibold text-ink-soft">Timetable setup</p>
         <button type="button" className="btn-quiet" onClick={() => downloadWorkbook(data)}>
           Download Excel workbook
         </button>
