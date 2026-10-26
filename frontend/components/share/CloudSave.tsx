@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import {
@@ -251,6 +252,9 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
               Share links
             </button>
           )}
+          <Link href="/approvals" className="btn-quiet">
+            Hall booking approvals
+          </Link>
         </div>
 
         {save.kind === "conflict" && (

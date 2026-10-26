@@ -3,6 +3,33 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: P3 Hall booking with digital approval** (this replaces the paper letter)
+  - **Backend** (`backend/app/bookings.py`; 3 new tables in `db.py`: `approval_steps`, `bookings`, `booking_actions`. Only new tables, so the live database needs no migration):
+    - `GET /colleges/{ref}/availability?room_id&date`: each period is free, or taken by a "class" (published timetable), a "booked" (approved) booking or a "requested" (pending) one;
+    - `POST /colleges/{ref}/bookings` (public): only event rooms (room type use `event`), not in the past, at most a year ahead, valid periods, attendees ≤ capacity, and only free periods. It returns a tracking token;
+    - `GET /bookings/{token}` and `POST …/cancel`: the organiser's tracking link and withdraw/cancel;
+    - `GET /colleges/{ref}/events` (public): approved events only, with no names or phone numbers;
+    - approvers: `GET /colleges/{ref}/approvals` and `POST …/approvals/{id}` (approve/reject + note), with `X-Approver-Key` (one step) or `X-Admin-Key` (may act for any step);
+    - admin: `GET/PUT /colleges/{ref}/approval-steps` (1–5 steps, in order) and `POST …/{id}/new-link`. Each step gets its own secret key, shown once, hash stored. Keeping a step by id keeps its link;
+    - **the backend owns the clash rule**: a request is checked against classes plus approved and pending bookings, and every approval re-checks against classes and approved bookings. Writes lock the college row (`FOR UPDATE` on Postgres), so two requests can't take one slot;
+    - **chain order**: a step's link only works while the request waits at that step ("This request is waiting for HOD, not Dean"). With no chain set, the admin approves (one step).
+    - Dates map to the college's own day names (first 3 letters), so "Mon" or "Monday" both work. A day with no classes leaves every period free.
+  - **Frontend**:
+    - **/book**: hall cards with seats, a date, then a period picker with clock times. Tap one period, then another, to take the free periods between; taken ones show Class / Booked / Requested. Then the event, attendees (warns above capacity), name, club and phone or email. `/book?college=CODE` opens that college;
+    - **/track/<token>**: "Waiting for Dean since 2 hours", the chain as Sent → HOD → Dean, each signature with its note and time, the details, a copy-able tracking link, and Withdraw / Cancel the event. Requests sent from this device are listed on /book;
+    - **/approvals**: approvers open their private link (`/approvals#college=…&step=…&key=…`; the key is removed from the address bar) and see "Waiting for you", "With other approvers" and "Decided". Approve / Reject takes a note and an optional name;
+    - the admin also gets "Who approves, in order" (add, rename, reorder, remove), each approver's link (saved in this browser; "Make a new link" elsewhere), and the booking link for organisers;
+    - **/events**: approved events by date with clock times, club and hall;
+    - nav: "Book a hall" and "Events" for everyone, "Approvals" when this device holds an admin or approver link. The setup bar links to approvals.
+  - **Tests**: 7 new (44 total, all pass). They cover overlap (adjacent, other day and other hall are fine), capacity and bad input, chain order (Dean before HOD refused, HOD can't act twice), reject and cancel free the slot, approval re-checks a slipped-through clash, who can see and act (public 403, link rotation, keeping a step keeps its link), and the need for a published timetable.
+  - **Tested in the browser**:
+    - published the sample, set HOD → Dean, booked Seminar Hall Mon 2 Nov periods 3–4 (200 attendees warned, 120 sent);
+    - tracking showed "Waiting for HOD";
+    - the Dean's link saw it under "With other approvers" with no buttons;
+    - HOD approved with a note, then the Dean approved; tracking showed Approved with both signatures;
+    - /events listed it, and /book showed periods 3–4 as Booked;
+    - 375px with no sideways scroll; lint and production build pass.
+  - Fixed while testing: opening a second approver link on the same page (only the `#` changes) now works (`hashchange`).
 - **2026-10-26: A database problem now explains itself** (after P2 went live)
   - On Render, `/colleges/…` returned a bare 500 (`/health` was fine). The cause was the `DATABASE_URL` value. The code worked with SQLite.
   - Now any database failure (an unparseable URL, a wrong host or password, an unreachable server) returns a **503** with "The timetable server can't reach its database… check DATABASE_URL… open /health/db". The CORS headers are kept, so the site shows that message instead of "can't reach the server".
@@ -170,7 +197,8 @@ Update after every completed step. Newest entries at the top of each section.
 
 ## Next
 1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
-2. P3: hall booking with digital approval (see prompts.md).
+2. Push P3 once the live P2 check with the P1 session is done (a push redeploys Render and Vercel).
+3. P4: teacher leave, substitutes and changes feed (see prompts.md).
 
 ## Problems & fixes
 - The project folder was moved, so `backend/.venv/bin/uvicorn` and `pip` point at the old path ("bad interpreter"). `.claude/launch.json` now runs `backend/.venv/bin/python -m uvicorn`; use `.venv/bin/python -m pip` too, or recreate the venv.

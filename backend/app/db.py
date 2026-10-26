@@ -81,6 +81,56 @@ class PublishedTimetable(Base):
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class ApprovalStep(Base):
+    """One step of the hall-booking approval chain, e.g. "HOD" then "Dean". Each has its own secret link."""
+
+    __tablename__ = "approval_steps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    college_id: Mapped[int] = mapped_column(ForeignKey("colleges.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer)  # 0 = first to approve
+    title: Mapped[str] = mapped_column(String(80))
+    key_hash: Mapped[str] = mapped_column(String(64))
+
+
+class Booking(Base):
+    """An organiser's request for an event room, moving through the approval chain."""
+
+    __tablename__ = "bookings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    college_id: Mapped[int] = mapped_column(ForeignKey("colleges.id", ondelete="CASCADE"), index=True)
+    token: Mapped[str] = mapped_column(String(40), unique=True, index=True)  # the organiser's tracking link
+    room_id: Mapped[str] = mapped_column(String(80))
+    date: Mapped[str] = mapped_column(String(10), index=True)  # YYYY-MM-DD
+    start_period: Mapped[int] = mapped_column(Integer)
+    end_period: Mapped[int] = mapped_column(Integer)  # inclusive
+    title: Mapped[str] = mapped_column(String(200))
+    purpose: Mapped[str] = mapped_column(String(2000))
+    attendees: Mapped[int] = mapped_column(Integer)
+    organiser: Mapped[str] = mapped_column(String(120))
+    club: Mapped[str] = mapped_column(String(120))
+    contact: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(20))  # pending | approved | rejected | cancelled
+    step: Mapped[int] = mapped_column(Integer, default=0)  # position it is waiting at, while pending
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class BookingAction(Base):
+    """Who did what to a booking: the paper letter's signatures, digitally."""
+
+    __tablename__ = "booking_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id", ondelete="CASCADE"), index=True)
+    action: Mapped[str] = mapped_column(String(20))  # approved | rejected | cancelled
+    step_title: Mapped[str] = mapped_column(String(80))
+    by: Mapped[str] = mapped_column(String(120))
+    note: Mapped[str] = mapped_column(String(1000), default="")
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 def normalise_url(url: str) -> str:
     """Supabase and Render hand out postgres:// URLs; SQLAlchemy needs the driver named."""
     for prefix in ("postgres://", "postgresql://"):

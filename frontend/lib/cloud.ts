@@ -169,10 +169,11 @@ const sameCollege = (t: CollegeInfo, ref: string) => t.code === ref.toUpperCase(
  * timetable from the server, cached for offline use. Otherwise the timetable
  * generated in this browser (the admin's preview).
  */
-export function useViewerTimetable(local: StoredTimetable | null | undefined) {
+export function useViewerTimetable(local: StoredTimetable | null | undefined, fallbackCode?: string | null) {
   const remembered = useLocal(VIEW_KEY);
   const rawCache = useLocal(CACHE_KEY);
-  const code = remembered ?? null;
+  // `fallbackCode`: e.g. the admin's own college, when nothing was opened by code.
+  const code = remembered ?? fallbackCode ?? null;
   const [fetched, setFetched] = useState<{ code: string; at: string; timetable: PublicTimetable | null; error: string | null } | null>(null);
   const [tick, setTick] = useState(0);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
