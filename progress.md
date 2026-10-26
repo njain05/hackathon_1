@@ -410,7 +410,7 @@ Update after every completed step. Newest entries at the top of each section.
 
 ## Next
 1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
-2. Push P7, P8 and the UX work when the user says so (a push to main redeploys Render and Vercel). Then re-run the secrets scan, ask about making the repo public, and test the live link on a phone.
+2. **Pushed 2026-10-27** (c114def..260e470: P7, P8, P10 and the UX work). Vercel and Render redeployed: the live site shows the new Home, /today and /ask. Secrets scan was clean (only the fake test key in test_ask.py). Still to do: ask about making the repo public, and test the live link on a phone.
 3. Add `ANTHROPIC_API_KEY` to `backend/.env` (local) and to Render's Environment, set a spending limit in the Anthropic console, and try a few questions live.
 
 ## Problems & fixes
