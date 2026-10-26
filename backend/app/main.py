@@ -14,6 +14,7 @@ from app import db
 from app.bookings import router as bookings_router
 from app.changes import router as changes_router
 from app.members import router as members_router
+from app.departments import router as departments_router
 from app.colleges import database_error, router as colleges_router
 from solver import CollegeData, SolveResult, precheck, sample_college, solve
 from solver.models import Problem
@@ -25,6 +26,7 @@ app.include_router(colleges_router)
 app.include_router(bookings_router)
 app.include_router(changes_router)
 app.include_router(members_router)
+app.include_router(departments_router)
 app.add_exception_handler(SQLAlchemyError, database_error)
 app.add_exception_handler(db.DatabaseUnavailable, database_error)
 
