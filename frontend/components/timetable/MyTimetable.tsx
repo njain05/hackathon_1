@@ -19,6 +19,8 @@ const ME_KEY = "timetable.me.v1";
 interface Me {
   role: "section" | "teacher";
   id: string;
+  /** The choice for each role, so switching student ⇄ teacher keeps both. */
+  ids?: Partial<Record<"section" | "teacher", string>>;
 }
 
 interface Clock {
@@ -115,13 +117,15 @@ function TodayPanel({ data, entries, role, clock }: { data: CollegeData; entries
   if (current?.type === "class") {
     nowBox = <ClassCard title="Now" cell={current} data={data} role={role} note={`ends in ${inMinutes(current.end - now)}`} />;
   } else {
-    const first = cells[0];
-    const last = cells[cells.length - 1];
+    // Your first and last class today (not the first period of the college day).
+    const classes = cells.filter((c): c is ClassCell => c.type === "class");
+    const first = classes[0];
+    const last = classes[classes.length - 1];
     const text =
       classesToday === 0
         ? "No classes today"
         : now < first.start
-          ? `Classes start at ${formatTime(first.start)}`
+          ? `Your first class is at ${formatTime(first.start)}`
           : now >= last.end || !next
             ? "Done for today"
             : current?.type === "break"
@@ -183,7 +187,8 @@ export default function MyTimetable() {
   const { data, result } = source.stored;
   const activeRole = role ?? me?.role ?? "section";
   const options = choices(data, activeRole);
-  const myId = me && me.role === activeRole && options.some((o) => o.id === me.id) ? me.id : "";
+  const remembered = me?.ids?.[activeRole] ?? (me?.role === activeRole ? me.id : "");
+  const myId = remembered && options.some((o) => o.id === remembered) ? remembered : "";
   const mine = myId ? entriesFor(result.entries, activeRole, myId) : [];
   const myLabel = options.find((o) => o.id === myId)?.label;
   // The Today card uses the day as it actually is; the week grid stays as published.
@@ -260,7 +265,14 @@ export default function MyTimetable() {
                 key={r}
                 type="button"
                 aria-pressed={activeRole === r}
-                onClick={() => setRole(r)}
+                onClick={() => {
+                  setRole(r);
+                  // Remember the role too; each role keeps its own section or name.
+                  if (me) {
+                    const ids = { [me.role]: me.id || undefined, ...me.ids };
+                    writeLocal(ME_KEY, JSON.stringify({ role: r, id: ids[r] ?? "", ids }));
+                  }
+                }}
                 className={`rounded px-4 py-2 text-sm font-semibold ${activeRole === r ? "bg-sky/50" : "hover:bg-blush"}`}
               >
                 {r === "section" ? "I'm a student" : "I'm a teacher"}
@@ -271,7 +283,10 @@ export default function MyTimetable() {
             <span className="field-label">{activeRole === "section" ? "Your section" : "Your name"}</span>
             <select
               value={myId}
-              onChange={(e) => writeLocal(ME_KEY, e.target.value ? JSON.stringify({ role: activeRole, id: e.target.value }) : null)}
+              onChange={(e) => {
+                const ids = { ...me?.ids, [activeRole]: e.target.value || undefined };
+                writeLocal(ME_KEY, JSON.stringify({ role: activeRole, id: e.target.value, ids }));
+              }}
               className="field min-w-64"
             >
               <option value="">Choose…</option>

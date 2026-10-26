@@ -16,6 +16,7 @@ export default function TrackBooking({ token }: { token: string }) {
   const [data, setData] = useState<CollegeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState<{ checking: boolean; at: string | null }>({ checking: false, at: null });
 
   const load = useCallback(() => {
     trackBooking(token)
@@ -23,8 +24,12 @@ export default function TrackBooking({ token }: { token: string }) {
         setB(x);
         setError(null);
         rememberBooking(x);
+        setChecked({ checking: false, at: new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) });
       })
-      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : "Couldn't load this request."));
+      .catch((e: unknown) => {
+        setError(e instanceof ApiError ? e.message : "Couldn't load this request.");
+        setChecked((c) => ({ ...c, checking: false }));
+      });
   }, [token]);
 
   useEffect(() => {
@@ -106,9 +111,22 @@ export default function TrackBooking({ token }: { token: string }) {
         </section>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" className="btn-quiet" onClick={load}>
-            Refresh
+          <button
+            type="button"
+            className="btn-quiet"
+            disabled={checked.checking}
+            onClick={() => {
+              setChecked((c) => ({ ...c, checking: true }));
+              load();
+            }}
+          >
+            {checked.checking ? "Checking…" : "Refresh"}
           </button>
+          {checked.at && !checked.checking && (
+            <span className="hint" aria-live="polite">
+              Up to date as of {checked.at}
+            </span>
+          )}
           {(b.status === "pending" || b.status === "approved") && (
             <button type="button" className="btn-quiet" disabled={busy} onClick={cancel}>
               {b.status === "approved" ? "Cancel the event" : "Withdraw request"}

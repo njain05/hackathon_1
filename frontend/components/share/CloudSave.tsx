@@ -32,18 +32,20 @@ function stable(v: unknown): string {
 }
 
 export function CopyField({ label, value, big }: { label: string; value: string; big?: boolean }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"no" | "yes" | "blocked">("no");
   const ref = useRef<HTMLInputElement>(null);
   const id = useId();
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(value);
+      setCopied("yes");
+      setTimeout(() => setCopied("no"), 2000);
     } catch {
-      ref.current?.select(); // clipboard blocked: select it so Ctrl+C works
-      return;
+      // Clipboard blocked (some browsers, in-app viewers): select it and say how to copy.
+      ref.current?.focus();
+      ref.current?.select();
+      setCopied("blocked");
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -60,9 +62,14 @@ export function CopyField({ label, value, big }: { label: string; value: string;
           className={`field min-w-0 flex-1 ${big ? "!text-2xl font-bold tracking-widest" : ""}`}
         />
         <button type="button" className="btn-quiet shrink-0" onClick={copy} aria-label={`Copy ${label.toLowerCase()}`}>
-          {copied ? "Copied" : "Copy"}
+          {copied === "yes" ? "Copied" : "Copy"}
         </button>
       </div>
+      {copied === "blocked" && (
+        <p role="status" className="hint">
+          This browser blocked copying. The text is selected: press Ctrl+C (or long-press and choose Copy).
+        </p>
+      )}
     </div>
   );
 }
@@ -236,8 +243,12 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
     <div className="border-y border-line bg-paper px-4 py-3 sm:px-6 print:hidden">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <p className="mr-auto" aria-live="polite">
-            <span className={`font-semibold ${save.kind === "error" ? "text-err" : save.kind === "saved" ? "text-ok" : ""}`}>
+          <p className="mr-auto">
+            {/* Only problems are announced to screen readers, not every autosave. */}
+            <span
+              role={save.kind === "error" ? "alert" : undefined}
+              className={`font-semibold ${save.kind === "error" ? "text-err" : save.kind === "saved" ? "text-ok" : ""}`}
+            >
               {status}
             </span>{" "}
             <span className="text-ink-soft">College code {access.code}</span>
@@ -306,30 +317,37 @@ export type OpenLinkState = { kind: "idle" } | { kind: "loading" } | { kind: "er
  */
 export function useOpenAdminLink(loaded: boolean, hasData: boolean, replaceData: (d: CollegeData) => void): OpenLinkState {
   const [state, setState] = useState<OpenLinkState>({ kind: "idle" });
+  // The link may also be pasted while /setup is already open: read the latest draft state then.
+  const latest = useRef({ hasData, replaceData });
+  useEffect(() => {
+    latest.current = { hasData, replaceData };
+  });
   useEffect(() => {
     if (!loaded) return;
-    const link = adminFromHash(window.location.hash);
-    if (!link) return;
-    window.history.replaceState(null, "", window.location.pathname + window.location.search);
     let live = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time: opening a link from the address bar
-    setState({ kind: "loading" });
-    getAdminCollege(link)
-      .then((c) => {
-        if (!live) return;
-        const before = readAdminAccess();
-        setAdminAccess({ code: c.code, slug: c.slug, name: c.name, key: link.key });
-        // An empty browser takes the online copy. If this browser already has a
-        // different setup, CloudSave asks which one to keep.
-        if (c.data && (!hasData || before?.code === c.code)) replaceData(c.data);
-        setState({ kind: "opened", name: c.name });
-      })
-      .catch((e: unknown) => live && setState({ kind: "error", message: errorText(e, "Couldn't open this admin link.") }));
+    const open = () => {
+      const link = adminFromHash(window.location.hash);
+      if (!link) return;
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setState({ kind: "loading" });
+      getAdminCollege(link)
+        .then((c) => {
+          if (!live) return;
+          const before = readAdminAccess();
+          setAdminAccess({ code: c.code, slug: c.slug, name: c.name, key: link.key });
+          // An empty browser takes the online copy. If this browser already has a
+          // different setup, CloudSave asks which one to keep.
+          if (c.data && (!latest.current.hasData || before?.code === c.code)) latest.current.replaceData(c.data);
+          setState({ kind: "opened", name: c.name });
+        })
+        .catch((e: unknown) => live && setState({ kind: "error", message: errorText(e, "Couldn't open this admin link.") }));
+    };
+    open();
+    window.addEventListener("hashchange", open);
     return () => {
       live = false;
+      window.removeEventListener("hashchange", open);
     };
-    // Runs once, when the saved draft has loaded.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
   return state;
 }

@@ -33,7 +33,7 @@ function RequestCard({ b, data, auth, canAct, onDone }: {
   data: CollegeData | null;
   auth: ApproverAuth;
   canAct: boolean;
-  onDone: () => void;
+  onDone: (message: string) => void;
 }) {
   const [note, setNote] = useState("");
   const [name, setName] = useState("");
@@ -41,11 +41,18 @@ function RequestCard({ b, data, auth, canAct, onDone }: {
   const [error, setError] = useState<string | null>(null);
 
   const act = async (action: "approve" | "reject") => {
+    if (action === "reject" && !note.trim() && !window.confirm("Reject without a note? The organiser won't see why.")) return;
     setBusy(true);
     setError(null);
     try {
-      await decideBooking(auth, b.id, action, note, name);
-      onDone();
+      const after = await decideBooking(auth, b.id, action, note, name);
+      onDone(
+        action === "reject"
+          ? `Rejected “${b.title}”. The organiser can see your note on their tracking page.`
+          : after.status === "approved"
+            ? `Approved “${b.title}”. The hall is booked and it is on the events calendar.`
+            : `Approved “${b.title}”. It now goes to ${after.waiting_for}.`,
+      );
     } catch (e) {
       setError(errorText(e, "Couldn't save your decision. Try again."));
       setBusy(false);
@@ -67,11 +74,11 @@ function RequestCard({ b, data, auth, canAct, onDone }: {
           <div className="grid gap-3 sm:grid-cols-[1fr_14rem]">
             <label className="flex flex-col gap-1">
               <span className="field-label">Note for the organiser (optional)</span>
-              <textarea className="field min-h-16" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Please keep the hall clean" />
+              <textarea className="field min-h-16" maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Please keep the hall clean" />
             </label>
             <label className="flex flex-col gap-1">
               <span className="field-label">Your name (optional)</span>
-              <input className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+              <input className="field" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
             </label>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -149,6 +156,7 @@ function ChainEditor({ admin, steps, onSaved }: { admin: AdminAccess; steps: Ste
               <input
                 className="field min-w-0 flex-1"
                 aria-label={`Step ${i + 1} title`}
+                maxLength={80}
                 placeholder="e.g. HOD"
                 value={r.title}
                 onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
@@ -217,6 +225,14 @@ export default function Approvals() {
   const [view, setView] = useState<{ for: string; value: ApprovalsView | null; error: string | null } | null>(null);
   const [reload, setReload] = useState(0);
   const [data, setData] = useState<CollegeData | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  // New requests may arrive while the page is open in another tab: check again when it is shown.
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === "visible" && setReload((r) => r + 1);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   // Opening an approver's link (/approvals#college=…&step=…&key=…): check it, keep it in this browser.
   // Also when a link is opened while this page is already showing (only the #… part changes).
@@ -288,12 +304,16 @@ export default function Approvals() {
 
   const current = view?.for === authKey ? view : null;
   const reloadView = () => setReload((r) => r + 1);
+  const decided = (m: string) => {
+    setMessage(m);
+    reloadView();
+  };
   const v = current?.value;
   const you = v?.you ?? null;
   const pending = (v?.bookings ?? []).filter((b) => b.status === "pending").sort((a, b) => a.created_at.localeCompare(b.created_at));
   const mine = pending.filter((b) => mode === "admin" || b.waiting_for === you?.title);
   const others = pending.filter((b) => !mine.includes(b));
-  const decided = (v?.bookings ?? []).filter((b) => b.status !== "pending").slice(0, 30);
+  const done = (v?.bookings ?? []).filter((b) => b.status !== "pending").slice(0, 30);
   const bookLink = typeof window === "undefined" || !code ? "" : `${window.location.origin}/book?college=${encodeURIComponent(code)}`;
 
   return (
@@ -351,27 +371,37 @@ export default function Approvals() {
 
         {v && (
           <>
+            {message && (
+              <p role="status" className="rounded-md bg-mint px-3 py-2 font-semibold">
+                {message}
+              </p>
+            )}
             <section className="flex flex-col gap-3" aria-label="Waiting for you">
-              <h2 className="text-xl font-bold">
-                Waiting for {mode === "admin" ? "a decision" : "you"} ({mine.length})
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="mr-auto text-xl font-bold">
+                  Waiting for {mode === "admin" ? "a decision" : "you"} ({mine.length})
+                </h2>
+                <button type="button" className="btn-quiet !py-1" onClick={reloadView}>
+                  Refresh
+                </button>
+              </div>
               {mine.length === 0 ? (
                 <p className="text-ink-soft">Nothing to approve right now.</p>
               ) : (
-                mine.map((b) => <RequestCard key={b.id} b={b} data={data} auth={auth} canAct onDone={reloadView} />)
+                mine.map((b) => <RequestCard key={b.id} b={b} data={data} auth={auth} canAct onDone={decided} />)
               )}
             </section>
             {others.length > 0 && (
               <section className="flex flex-col gap-3" aria-label="With other approvers">
                 <h2 className="text-xl font-bold">With other approvers ({others.length})</h2>
-                {others.map((b) => <RequestCard key={b.id} b={b} data={data} auth={auth} canAct={false} onDone={reloadView} />)}
+                {others.map((b) => <RequestCard key={b.id} b={b} data={data} auth={auth} canAct={false} onDone={decided} />)}
               </section>
             )}
-            {decided.length > 0 && (
+            {done.length > 0 && (
               <details className="flex flex-col gap-3">
-                <summary className="cursor-pointer text-xl font-bold">Decided ({decided.length})</summary>
+                <summary className="cursor-pointer text-xl font-bold">Decided ({done.length})</summary>
                 <div className="mt-3 flex flex-col gap-3">
-                  {decided.map((b) => <RequestCard key={b.id} b={b} data={data} auth={auth} canAct={false} onDone={reloadView} />)}
+                  {done.map((b) => <RequestCard key={b.id} b={b} data={data} auth={auth} canAct={false} onDone={decided} />)}
                 </div>
               </details>
             )}

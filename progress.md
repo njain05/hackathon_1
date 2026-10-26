@@ -3,6 +3,26 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-26: Usability fixes from the P1 audit (my pages)**
+  - **Book a hall**:
+    - Send is always pressable and lists what's missing ("Choose a hall.", "Tap the free periods you need.", "Add a phone number or email."…), each a link to that field, and focus jumps to the first one;
+    - a failed send keeps the chosen periods, except when someone just took them (409), when the free periods reload;
+    - attendees takes digits only (no scroll-wheel changes, no "e");
+    - the contact box isn't email-only, and every box has the server's length limit.
+  - **Approvals**: rejecting without a note asks first. After a decision it says what happened ("Approved … It now goes to Dean." / "The hall is booked…"). There is a Refresh button, and the page reloads when reopened. Note and step-title limits added.
+  - **Tracking page**: Refresh shows "Checking…" then "Up to date as of 14:05".
+  - **Change college**: the code is checked with the server first, so a typo shows "No college with the code…" and keeps the college already open.
+  - **Save & share**:
+    - when the browser blocks copying, the text is selected with "press Ctrl+C (or long-press and choose Copy)";
+    - only save errors are announced to screen readers, not every autosave;
+    - an admin link pasted while /setup is open now works (`hashchange`) and is removed from the address bar.
+  - **My timetable**: "Your first class is at …" uses your first class, not the college's first period. Student and teacher choices are both remembered, also after a reload, and old saved choices carry over.
+  - **Tested in the browser**:
+    - empty Send listed all 7 missing items with focus on the hall;
+    - "1e2x0" in attendees became "120";
+    - student CSE-3A → teacher HK → student kept CSE-3A after a reload;
+    - a wrong code kept TYHEGP.
+  - Lint, type check and production build pass; 65 backend tests pass.
 - **2026-10-26: Usability pass, open electives, room sharing, fair workload, department roles** (P1 session, user request: "the whole site is very buggy… make this the best")
   - **Bugs a real person felt**, fixed from a code-verified audit of every screen:
     - number boxes now let you type, delete and paste (`components/ui/NumberInput.tsx`);

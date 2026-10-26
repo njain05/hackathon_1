@@ -50,7 +50,7 @@ function PeriodPicker({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" role="group" aria-label="Periods">
+      <div id="book-periods" tabIndex={-1} className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" role="group" aria-label="Periods">
         {slots.periods.map((s) => {
           const t = times[s.period - 1];
           const on = start !== null && end !== null && s.period >= start && s.period <= end;
@@ -100,6 +100,7 @@ export default function BookHall() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const [showMissing, setShowMissing] = useState(false);
 
   const code = college.kind === "ready" ? college.college.code : null;
   const key = `${code}|${roomId}|${date}`;
@@ -126,13 +127,28 @@ export default function BookHall() {
   const end = range.key === key ? range.end : null;
   const attendees = Number(form.attendees);
   const tooMany = room && attendees > room.capacity;
-  const ready =
-    room && date && start !== null && end !== null && form.title.trim() && attendees >= 1 && !tooMany &&
-    form.organiser.trim() && form.club.trim() && form.contact.trim().length >= 3;
+  // What's still missing, in order, with the field to jump to.
+  const missing: { id: string; text: string }[] = [
+    ...(!room ? [{ id: "book-room", text: "Choose a hall." }] : []),
+    ...(!date ? [{ id: "book-date", text: "Choose a date." }] : []),
+    ...(room && date && (start === null || end === null) ? [{ id: "book-periods", text: "Tap the free periods you need." }] : []),
+    ...(!form.title.trim() ? [{ id: "book-title", text: "Give the event a name." }] : []),
+    ...(!(attendees >= 1) ? [{ id: "book-attendees", text: "Say how many people you expect." }] : []),
+    ...(tooMany ? [{ id: "book-attendees", text: `${room?.name || room?.id} seats only ${room?.capacity}. Choose a bigger hall or fewer people.` }] : []),
+    ...(!form.organiser.trim() ? [{ id: "book-organiser", text: "Add your name." }] : []),
+    ...(!form.club.trim() ? [{ id: "book-club", text: "Add your club or department." }] : []),
+    ...(form.contact.trim().length < 3 ? [{ id: "book-contact", text: "Add a phone number or email." }] : []),
+  ];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready || start === null || end === null) return;
+    if (missing.length || start === null || end === null) {
+      setShowMissing(true);
+      const first = document.getElementById(missing[0]?.id ?? "");
+      first?.focus();
+      first?.scrollIntoView({ block: "center" });
+      return;
+    }
     setSending(true);
     setError(null);
     try {
@@ -144,9 +160,11 @@ export default function BookHall() {
       router.push(`/track/${encodeURIComponent(b.token)}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't send the request. Try again.");
-      // Someone may have just taken the slot: show the latest free periods.
-      setReload((r) => r + 1);
-      setRange({ key: "", start: null, end: null });
+      // Someone else just took one of these periods: show the latest free ones. Otherwise keep the choice.
+      if (err instanceof ApiError && err.cause === 409) {
+        setReload((r) => r + 1);
+        setRange({ key: "", start: null, end: null });
+      }
       setSending(false);
     }
   };
@@ -186,7 +204,7 @@ export default function BookHall() {
                     key={r.id}
                     className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 ${roomId === r.id ? "border-navy bg-sky/30" : "border-line bg-paper hover:bg-blush"}`}
                   >
-                    <input type="radio" name="room" value={r.id} checked={roomId === r.id} onChange={() => setRoomId(r.id)} />
+                    <input type="radio" name="room" id={r.id === rooms[0]?.id ? "book-room" : undefined} value={r.id} checked={roomId === r.id} onChange={() => setRoomId(r.id)} />
                     <span>
                       <span className="block font-semibold">{r.name || r.id}</span>
                       <span className="text-sm text-ink-soft">Seats {r.capacity}</span>
@@ -200,7 +218,7 @@ export default function BookHall() {
               <legend className="mb-2 text-lg font-bold">2. Which day and periods?</legend>
               <label className="flex flex-col gap-1">
                 <span className="field-label">Date</span>
-                <input type="date" className="field w-fit" min={todayIso()} value={date} onChange={(e) => setDate(e.target.value)} />
+                <input id="book-date" type="date" className="field w-fit" min={todayIso()} value={date} onChange={(e) => setDate(e.target.value)} />
               </label>
               {!roomId || !date ? (
                 <p className="hint">Choose a hall and a date to see its free periods.</p>
@@ -231,15 +249,24 @@ export default function BookHall() {
               <legend className="mb-2 text-lg font-bold">3. About the event</legend>
               <label className="flex flex-col gap-1">
                 <span className="field-label">Event name</span>
-                <input className="field" placeholder="e.g. Inter-college coding contest" {...field("title")} />
+                <input id="book-title" className="field" maxLength={200} placeholder="e.g. Inter-college coding contest" {...field("title")} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="field-label">Purpose (optional)</span>
-                <textarea className="field min-h-20" placeholder="What happens, who is invited, any equipment needed" {...field("purpose")} />
+                <textarea className="field min-h-20" maxLength={2000} placeholder="What happens, who is invited, any equipment needed" {...field("purpose")} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="field-label">Expected attendees{room ? ` (${room.name || room.id} seats ${room.capacity})` : ""}</span>
-                <input className="field w-40" type="number" min={1} inputMode="numeric" {...field("attendees")} />
+                <input
+                  id="book-attendees"
+                  className="field w-40"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={6}
+                  value={form.attendees}
+                  // Digits only: no scroll-wheel surprises and no "e" as in a number box.
+                  onChange={(e) => setForm({ ...form, attendees: e.target.value.replace(/\D/g, "") })}
+                />
                 {tooMany && (
                   <span className="font-semibold text-err">
                     Too many for this hall. Choose a bigger one or lower the number.
@@ -253,26 +280,40 @@ export default function BookHall() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="flex flex-col gap-1">
                   <span className="field-label">Your name</span>
-                  <input className="field" autoComplete="name" {...field("organiser")} />
+                  <input id="book-organiser" className="field" maxLength={120} autoComplete="name" {...field("organiser")} />
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="field-label">Club or department</span>
-                  <input className="field" placeholder="e.g. Coding Club" {...field("club")} />
+                  <input id="book-club" className="field" maxLength={120} placeholder="e.g. Coding Club" {...field("club")} />
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="field-label">Phone or email</span>
-                  <input className="field" autoComplete="email" {...field("contact")} />
+                  <input id="book-contact" className="field" maxLength={120} placeholder="Phone or email" {...field("contact")} />
                 </label>
               </div>
               <p className="hint">Only the approvers see your phone or email, so they can reach you about the booking.</p>
             </fieldset>
 
             <div className="flex flex-wrap items-center gap-4">
-              <button type="submit" className="btn-primary !px-5 !py-3 !text-base" disabled={!ready || sending}>
+              <button type="submit" className="btn-primary !px-5 !py-3 !text-base" disabled={sending}>
                 {sending ? "Sending…" : "Send booking request"}
               </button>
-              {!ready && <span className="hint">Fill in every step above to send it.</span>}
+
             </div>
+            {showMissing && missing.length > 0 && (
+              <div role="alert" className="rounded-md bg-blush p-3">
+                <p className="font-semibold">Before sending:</p>
+                <ul className="list-disc pl-5">
+                  {missing.map((m, i) => (
+                    <li key={i}>
+                      <button type="button" className="text-left underline" onClick={() => document.getElementById(m.id)?.focus()}>
+                        {m.text}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {error && (
               <p role="alert" className="font-semibold text-err">
                 {error}

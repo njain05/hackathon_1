@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useId, useState } from "react";
-import { setViewedCollege } from "@/lib/cloud";
+import { ApiError } from "@/lib/api";
+import { getCollege, setViewedCollege } from "@/lib/cloud";
 
 /** "K7M2QP", "k7m2qp" or a pasted share link ".../c/gndec-ludhiana" → the code or slug. */
 function parseRef(text: string): string {
@@ -14,16 +15,28 @@ function parseRef(text: string): string {
 /** Type a college code or paste the share link. */
 export function CollegeCodeForm({ error, onCancel }: { error?: string; onCancel?: () => void }) {
   const [text, setText] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [wrong, setWrong] = useState<string | null>(null);
   const id = useId();
   return (
     <form
       className="flex flex-col gap-3"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         const ref = parseRef(text);
         if (!ref) return;
-        setViewedCollege(ref);
-        onCancel?.();
+        // Check the code first, so a typo never replaces the college already open on this device.
+        setChecking(true);
+        setWrong(null);
+        try {
+          const c = await getCollege(ref);
+          setViewedCollege(c.code);
+          onCancel?.();
+        } catch (err) {
+          setWrong(err instanceof ApiError ? err.message : "Couldn't check that code. Try again.");
+        } finally {
+          setChecking(false);
+        }
       }}
     >
       <div className="flex flex-col gap-1">
@@ -41,8 +54,8 @@ export function CollegeCodeForm({ error, onCancel }: { error?: string; onCancel?
             spellCheck={false}
             className="field min-w-0 flex-1 !text-lg"
           />
-          <button type="submit" className="btn-primary" disabled={!parseRef(text)}>
-            Open timetable
+          <button type="submit" className="btn-primary" disabled={!parseRef(text) || checking}>
+            {checking ? "Checking…" : "Open timetable"}
           </button>
           {onCancel && (
             <button type="button" className="btn-quiet" onClick={onCancel}>
@@ -51,9 +64,9 @@ export function CollegeCodeForm({ error, onCancel }: { error?: string; onCancel?
           )}
         </div>
       </div>
-      {error && (
+      {(wrong ?? error) && (
         <p role="alert" className="font-semibold text-err">
-          {error}
+          {wrong ?? error}
         </p>
       )}
     </form>
