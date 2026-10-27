@@ -93,6 +93,17 @@ def get_claude() -> ClaudeClient:
     return _client
 
 
+class AssistantStatus(BaseModel):
+    ready: bool
+
+
+@router.get("/assistant/status", response_model=AssistantStatus)
+def assistant_status() -> AssistantStatus:
+    """Whether "Ask the timetable" is set up on this server (so the page can hide the box if not).
+    Says only yes or no; never anything about the key."""
+    return AssistantStatus(ready=bool(os.getenv("ANTHROPIC_API_KEY")))
+
+
 # ---------- Request ----------
 
 

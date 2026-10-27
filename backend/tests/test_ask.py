@@ -261,3 +261,11 @@ def test_explain_problems_uses_what_the_admin_sent(college: dict[str, Any]) -> N
     assert "Not enough lab time" in explain_problems(ctx)
     ctx, _ = context(college, penalties={"teacher_load_imbalance": 16, "student_gaps": 0})
     assert "uneven teacher load across days: 16" in explain_problems(ctx)
+
+
+def test_status_says_only_whether_the_helper_is_set_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert client.get("/assistant/status").json() == {"ready": False}
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-SECRET456")
+    res = client.get("/assistant/status")
+    assert res.json() == {"ready": True} and "SECRET456" not in res.text
