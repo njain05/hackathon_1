@@ -157,6 +157,11 @@ function TemplatePicker({ onPick }: { onPick: (d: CollegeData) => void }) {
 }
 
 function Stepper({ current, data, onGo }: { current: StepId; data: CollegeData; onGo: (s: StepId) => void }) {
+  // On a phone the steps scroll sideways: keep the current one in view.
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [current]);
   return (
     <nav aria-label="Setup steps" className="overflow-x-auto">
       <ol className="flex min-w-max border-y border-line bg-paper">
@@ -166,6 +171,7 @@ function Stepper({ current, data, onGo }: { current: StepId; data: CollegeData; 
             <li key={s.id} className="flex-1 border-l border-line first:border-l-0">
               <button
                 type="button"
+                ref={active ? activeRef : undefined}
                 onClick={() => onGo(s.id)}
                 aria-current={active ? "step" : undefined}
                 className={`flex w-full min-w-36 flex-col items-start px-4 py-2.5 text-left ${active ? "bg-sky" : "hover:bg-blush/60"}`}
@@ -182,9 +188,21 @@ function Stepper({ current, data, onGo }: { current: StepId; data: CollegeData; 
   );
 }
 
+/** The step in the address bar (/setup?step=rooms), so reloading or pressing Back keeps your place. */
+function stepFromUrl(): StepId | null {
+  if (typeof window === "undefined") return null;
+  const s = new URLSearchParams(window.location.search).get("step");
+  return STEPS.some((x) => x.id === s) ? (s as StepId) : null;
+}
+
 export default function SetupWizard() {
   const { data, loaded, setData, replaceData } = useCollege();
-  const [step, setStep] = useState<StepId>("week");
+  const [step, setStep] = useState<StepId>(() => stepFromUrl() ?? "week");
+  useEffect(() => {
+    const onBack = () => setStep(stepFromUrl() ?? "week");
+    window.addEventListener("popstate", onBack);
+    return () => window.removeEventListener("popstate", onBack);
+  }, []);
   const [report, setReport] = useState<Report | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -232,6 +250,7 @@ export default function SetupWizard() {
           onPick={(d) => {
             replaceData(d);
             setReport(null);
+            window.history.replaceState(null, "", window.location.pathname); // back to step 1, in the address bar too
             setStep("week");
           }}
         />
@@ -242,6 +261,7 @@ export default function SetupWizard() {
   const info = STEPS[index];
   const onChange = (d: CollegeData) => setData(() => d);
   const go = (s: StepId) => {
+    if (s !== step) window.history.pushState(null, "", `${window.location.pathname}?step=${s}`);
     setStep(s);
     window.scrollTo({ top: 0 });
   };
@@ -258,6 +278,7 @@ export default function SetupWizard() {
     clearTimetable();
     replaceData(null);
     setReport(null);
+    window.history.replaceState(null, "", window.location.pathname);
     setStep("week");
     window.scrollTo({ top: 0 });
   };
@@ -344,7 +365,7 @@ export default function SetupWizard() {
           <button type="button" className="btn-quiet" disabled={index === 0} onClick={() => go(STEPS[index - 1].id)}>
             Back
           </button>
-          <span className="hint ml-auto hidden sm:inline">Saved automatically in this browser</span>
+          <span className="hint ml-auto hidden sm:inline">{admin ? "Saved online automatically" : "Saved automatically in this browser"}</span>
           {index < STEPS.length - 1 && (
             <button type="button" className="btn-primary" onClick={() => go(STEPS[index + 1].id)}>
               Next: {STEPS[index + 1].title}

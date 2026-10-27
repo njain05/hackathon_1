@@ -144,7 +144,7 @@ export default function TodayPage() {
               All timetables
             </Link>
             <Link href="/people" className="btn-quiet">
-              Teacher and HOD links
+              People &amp; sign-ins
             </Link>
             <Link href="/events" className="btn-quiet">
               Events
