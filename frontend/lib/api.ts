@@ -100,5 +100,6 @@ export const getSample = () => call<CollegeData>("/sample");
 export const checkCollege = (d: CollegeData) =>
   call<{ ok: boolean; problems: Problem[] }>("/check", { method: "POST", body: JSON.stringify(toApi(d)) });
 
-export const generateTimetable = (d: CollegeData) =>
-  call<SolveResult>("/generate?time_limit=20", { method: "POST", body: JSON.stringify(toApi(d)) });
+/** `seconds`: how long the solver may search (the server allows up to 60). */
+export const generateTimetable = (d: CollegeData, seconds = 20) =>
+  call<SolveResult>(`/generate?time_limit=${seconds}`, { method: "POST", body: JSON.stringify(toApi(d)) });

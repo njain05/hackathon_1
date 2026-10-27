@@ -35,7 +35,7 @@ def main(base: str) -> None:
     college = call(base, "/colleges", {"name": data["name"], "data": data})
     code, dean = college["code"], {"X-Admin-Key": college["admin_key"]}
     call(base, f"/colleges/{code}/data", data, dean, method="PUT")
-    result = call(base, "/generate?time_limit=20", data)
+    result = call(base, "/generate?time_limit=60", data)
     assert result["status"] == "solved", result.get("problems")
     call(base, f"/colleges/{code}/publish", {"data": data, "result": result}, dean)
 

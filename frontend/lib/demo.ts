@@ -13,7 +13,7 @@ export interface DemoLogin {
 }
 
 const LIVE: { code: string; logins: DemoLogin[] } = {
-  code: "",
+  code: "4H7GM5",
   logins: [
     { role: "dean", label: "Dean", username: "dean", password: "demo1234" },
     { role: "hod", label: "HOD", username: "hod", password: "demo1234" },

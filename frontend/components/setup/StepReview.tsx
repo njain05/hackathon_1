@@ -167,7 +167,7 @@ export default function StepReview({ data, goTo }: Props) {
 
   const [server, setServer] = useState<{ for: CollegeData; problems: Problem[] } | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
+  const [generating, setGenerating] = useState<false | "first" | "longer">(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [result, setResult] = useState<SolveResult | null>(null);
   const [attempt, setAttempt] = useState(0); // "Check again" re-runs the server check
@@ -206,11 +206,16 @@ export default function StepReview({ data, goTo }: Props) {
   const held = depts.waiting.length > 0 && !override;
 
   const generate = async () => {
-    setGenerating(true);
+    setGenerating("first");
     setGenerateError(null);
     setResult(null);
     try {
-      const r = await generateTimetable(data);
+      let r = await generateTimetable(data);
+      // A big college on the free server's slow CPU may need longer: keep going, up to a minute.
+      if (r.status === "timeout") {
+        if (mounted.current) setGenerating("longer");
+        r = await generateTimetable(data, 60);
+      }
       if (r.status === "solved") {
         // Save exactly what was sent, so Publish gets data that matches the timetable.
         saveTimetable({ data: toApi(data), result: r, at: new Date().toISOString() });
@@ -301,11 +306,13 @@ export default function StepReview({ data, goTo }: Props) {
       <section className="flex flex-col gap-3 rounded-md border border-line bg-paper p-4">
         <DepartmentsGate depts={depts} override={override} setOverride={setOverride} />
         <div className="flex flex-wrap items-center gap-4">
-          <button type="button" className="btn-primary !px-5 !py-3 !text-base" disabled={!ready || held || generating} onClick={generate}>
+          <button type="button" className="btn-primary !px-5 !py-3 !text-base" disabled={!ready || held || generating !== false} onClick={generate}>
             {generating ? "Generating timetable…" : "Generate timetable"}
           </button>
           <p className="hint" aria-live="polite">
-            {generating
+            {generating === "longer"
+              ? "This college needs a little longer on the free server. Still working: up to one more minute."
+              : generating
               ? "Fitting every class around teachers, rooms and breaks, then checking for clashes. This usually takes 5 to 20 seconds."
               : ready && held
                 ? "Available once every department's HOD has approved, or tick “Generate anyway”."
