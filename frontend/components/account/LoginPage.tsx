@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import AppNav from "@/components/AppNav";
-import { homeFor, lastSignInCollege, ROLE_NAME, signIn, signOut, useAccount } from "@/lib/accounts";
+import { type AccountRole, homeFor, lastSignInCollege, ROLE_NAME, signIn, signOut, useAccount } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
+import { DEMO } from "@/lib/demo";
 
 /** "k7m 2qp" as read aloud → "K7M2QP". */
 const cleanCode = (text: string) => text.replace(/\s+/g, "").toUpperCase();
@@ -19,6 +20,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Evaluators: the chosen demo sign-in shows in grey in the boxes and is used for any box left empty.
+  const [demoRole, setDemoRole] = useState<AccountRole>("dean");
+  const demo = DEMO.logins.find((l) => l.role === demoRole) ?? DEMO.logins[0];
   if (account === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
   // Only read once the browser has loaded (after the line above), so the server and browser render alike.
   const lastCode = lastSignInCollege();
@@ -47,15 +51,18 @@ export default function LoginPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const c = cleanCode(shownCode);
-    if (!c || !username.trim() || !password) {
+    // Typed values always win; an empty box falls back to the demo sign-in shown in grey.
+    const c = cleanCode(shownCode) || (demo ? DEMO.code : "");
+    const u = username.trim() || demo?.username || "";
+    const p = password || demo?.password || "";
+    if (!c || !u || !p) {
       setError("Fill in the college code, your username and your password.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const a = await signIn(c, username.trim(), password);
+      const a = await signIn(c, u, p);
       router.push(homeFor(a.role));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn’t sign in. Check your internet and try again.");
@@ -72,6 +79,31 @@ export default function LoginPage() {
           <p className="text-ink-soft">Use the username and password your college gave you.</p>
         </div>
 
+        {demo && (
+          <div role="group" aria-labelledby="demo-label" className="flex flex-col gap-2">
+            <p id="demo-label" className="field-label">
+              Evaluators: try it as
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {DEMO.logins.map((l) => (
+                <button
+                  key={l.role}
+                  type="button"
+                  aria-pressed={l.role === demo.role}
+                  onClick={() => {
+                    setDemoRole(l.role);
+                    setCode(""); // show the demo college's code instead of a remembered one
+                    setError(null);
+                  }}
+                  className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${l.role === demo.role ? "border-navy bg-sky/40" : "border-line bg-paper hover:bg-blush"}`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={submit} className="flex flex-col gap-4 rounded-lg border border-line bg-paper p-5" noValidate>
           <label className="flex flex-col gap-1">
             <span className="field-label">College code</span>
@@ -83,7 +115,7 @@ export default function LoginPage() {
               autoComplete="organization"
               spellCheck={false}
               maxLength={40}
-              placeholder="e.g. K7M2QP"
+              placeholder={demo ? DEMO.code : "e.g. K7M2QP"}
             />
             {lastCode && code === null && <span className="hint">Remembered from your last sign-in.</span>}
           </label>
@@ -97,6 +129,7 @@ export default function LoginPage() {
               autoCapitalize="none"
               spellCheck={false}
               maxLength={80}
+              placeholder={demo?.username}
             />
           </label>
           <label className="flex flex-col gap-1">
@@ -108,8 +141,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               maxLength={200}
+              placeholder={demo?.password}
             />
           </label>
+          {demo && (
+            <p className="hint">
+              <span aria-hidden>🎓 </span>Evaluators: the demo sign-in is shown in grey. Just press Sign in.
+            </p>
+          )}
           {error && (
             <p role="alert" className="font-semibold text-err">
               {error}
