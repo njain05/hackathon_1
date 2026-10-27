@@ -5,13 +5,21 @@ import { useEffect, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { ApiError } from "@/lib/api";
 import { type CalendarEvent, dateText, getEvents, periodText, todayIso } from "@/lib/bookings";
+import { setViewedCollege } from "@/lib/cloud";
 import { CollegeNeeded, usePublishedCollege } from "./common";
+import PageLoading from "@/components/ui/PageLoading";
 
 /** Approved events by date, so two clubs don't pick the same day. */
 export default function EventsCalendar() {
   const college = usePublishedCollege();
   const code = college.kind === "ready" ? college.college.code : null;
   const [events, setEvents] = useState<{ code: string; list: CalendarEvent[] | null; error: string | null } | null>(null);
+
+  // A link like /events?college=K7M2QP (e.g. from a tracking page) opens that college on this device.
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("college");
+    if (ref) setViewedCollege(ref);
+  }, []);
 
   useEffect(() => {
     if (!code) return;
@@ -24,7 +32,7 @@ export default function EventsCalendar() {
     };
   }, [code]);
 
-  if (college.kind === "loading") return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (college.kind === "loading") return <PageLoading />;
   if (college.kind === "none") return <CollegeNeeded title="Events calendar" error={college.error} />;
 
   const { data } = college;
@@ -39,10 +47,10 @@ export default function EventsCalendar() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold sm:text-3xl">Events calendar</h1>
-            <p className="text-ink-soft">Approved events in {college.college.name}’s halls, from today on.</p>
+            <p className="text-ink-soft">Approved events in {college.college.name}’s halls and rooms, from today on.</p>
           </div>
           <Link href="/book" className="btn-primary">
-            Book a hall
+            Book a room
           </Link>
         </div>
 
@@ -52,7 +60,7 @@ export default function EventsCalendar() {
           <p className="font-semibold text-err">{current.error}</p>
         ) : byDate.size === 0 ? (
           <p className="rounded-md border border-line bg-paper p-4 text-lg">
-            No events are booked yet. Halls are free on every day that has no classes in them.
+            No events are booked from today on. Every hall is free: pick a date and book it.
           </p>
         ) : (
           <ol className="flex flex-col gap-5">

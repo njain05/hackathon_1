@@ -62,7 +62,7 @@ function ClassContent({ cell, view, names, colours, compact }: {
             <li key={i} className="text-xs" title={`${names.subject(e.subject_id)}: ${names.teacher(e.teacher_id)}, ${names.room(e.room_id)}`}>
               <span className="font-semibold">{names.subject(e.subject_id)}</span>
               {/* The room is what a student needs most; the teacher is in the tooltip and for screen readers. */}
-              <span className="block truncate text-ink">
+              <span className="block truncate text-ink print:whitespace-normal">
                 {names.room(e.room_id)}
                 <span className="sr-only">, {names.teacher(e.teacher_id)}</span>
               </span>
@@ -89,7 +89,7 @@ function ClassContent({ cell, view, names, colours, compact }: {
           </span>
           <span className={`text-xs ${compact ? "" : "line-clamp-2"}`}>{names.subject(e.subject_id)}</span>
           {details(e, view, names).map((t, k) => (
-            <span key={k} className="truncate text-xs text-ink">
+            <span key={k} className="truncate text-xs text-ink print:whitespace-normal">
               {t}
             </span>
           ))}
@@ -158,7 +158,7 @@ export default function TimetableGrid({ data, entries, view, highlightDay, highl
                       key={i}
                       colSpan={c.span}
                       className={`h-24 border-l border-line p-1 align-top ${c.type === "break" ? "bg-mint/50" : c.type === "off" ? "bg-cream" : ""} ${
-                        isNow(row.day, c) ? "outline-3 -outline-offset-2 outline-navy" : ""
+                        isNow(row.day, c) ? "outline-3 -outline-offset-2 outline-navy print:outline-none" : ""
                       }`}
                     >
                       {c.type === "class" && <ClassContent cell={c} view={view} names={names} colours={colours} />}
@@ -238,7 +238,7 @@ export function SubjectKey({ data, entries, view }: { data: CollegeData; entries
   });
   if (!rows.length) return null;
   return (
-    <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+    <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 print:gap-y-0.5 print:text-xs">
       {rows.map((r) => (
         <li key={r.id} className="flex items-start gap-2">
           <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm border border-line" style={subjectBg(colours.get(r.id))} aria-hidden />

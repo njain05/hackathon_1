@@ -111,3 +111,13 @@ body {
 @utility hint {
     @apply text-sm text-ink-soft;
 }
+
+/* Fades in after a short wait, so a quick load never flashes "Loading…". */
+@keyframes appear {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@utility appear-late {
+    animation: appear 0.2s ease-in 0.4s both;
+}

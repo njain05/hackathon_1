@@ -22,6 +22,7 @@ import { assignmentsTable, roomsTable, sectionsTable, subjectsTable, teachersTab
 import type { CollegeData, Problem } from "@/lib/types";
 import InchargeLink from "./InchargeLink";
 import RoomSharing from "./RoomSharing";
+import PageLoading from "@/components/ui/PageLoading";
 
 type Tab = "rooms" | "teachers" | "sections" | "subjects" | "review";
 const tabs = (isHod: boolean): { id: Tab; label: string }[] => [
@@ -121,7 +122,7 @@ export default function DepartmentPage() {
     [dept],
   );
 
-  if (incharge === undefined || hod === undefined || opening.opening) return <p className="p-8 text-ink-soft">Opening…</p>;
+  if (incharge === undefined || hod === undefined || opening.opening) return <PageLoading text="Opening…" />;
   if (!member || !staff)
     return (
       <>

@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { ApiError } from "@/lib/api";
-import { type Booking, getMyBookings, periodText, since } from "@/lib/bookings";
+import { ago, type Booking, getMyBookings, periodText } from "@/lib/bookings";
 import { StatusBadge, whereItIs } from "@/components/bookings/common";
 import { type Leave, LEAVE_STATUS, addLeave, getMyLeaves, isoDate, shortDate } from "@/lib/changes";
 import { getPublished } from "@/lib/cloud";
 import { type MemberAccess, setMemberAccess, useMemberAccess, useOpenMemberLink } from "@/lib/members";
 import type { CollegeData } from "@/lib/types";
 import { ChangesFeed, ChangesUnknown, useMyDay } from "./MyChanges";
+import PageLoading from "@/components/ui/PageLoading";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -22,7 +23,7 @@ function periodsText(d: CollegeData | null, lv: Pick<Leave, "start_period" | "en
 
 /** Where a request stands, in words: waiting, approved (and by whom), or not approved and why. */
 export function leaveStatusText(lv: Leave): string {
-  if (lv.status === "pending") return `Waiting for ${lv.waiting_for}${lv.waiting_since ? ` since ${since(lv.waiting_since)}` : ""}`;
+  if (lv.status === "pending") return `Waiting for ${lv.waiting_for}${lv.waiting_since ? `, asked ${ago(lv.waiting_since)}` : ""}`;
   const note = lv.decision_note ? `: “${lv.decision_note}”` : "";
   return lv.status === "approved" ? `Approved by ${lv.decided_by}${note}` : `Not approved by ${lv.decided_by}${note}`;
 }
@@ -98,7 +99,7 @@ function LeaveRequestForm({ teacher, data, onSent }: { teacher: MemberAccess; da
           </>
         )}
         <label className="flex min-w-48 flex-1 flex-col gap-1">
-          <span className="field-label">Reason (seen only by your HOD and the timetable in-charge)</span>
+          <span className="field-label">Reason (seen only by your HOD and the Dean)</span>
           <input className="field" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Medical leave" />
         </label>
       </div>
@@ -191,7 +192,7 @@ export default function TeacherPage() {
     };
   }, [teacher, key]);
 
-  if (teacher === undefined || opening.opening) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (teacher === undefined || opening.opening) return <PageLoading />;
 
   if (!teacher)
     return (
@@ -201,7 +202,7 @@ export default function TeacherPage() {
           <h1 className="text-3xl font-bold">Teacher page</h1>
           {opening.error && <p className="text-lg font-semibold text-err">{opening.error}</p>}
           <p className="text-lg text-ink-soft">
-            This page is for teachers. Open the private link the timetable in-charge sent you to ask for leave and see
+            This page is for teachers. Open the private link the Dean’s office sent you to ask for leave, book a room and see
             your changes. Students: your timetable is on My timetable.
           </p>
           <Link href="/my" className="btn-quiet w-fit">

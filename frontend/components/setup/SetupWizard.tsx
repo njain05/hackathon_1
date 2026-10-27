@@ -9,6 +9,7 @@ import { readAdminAccess, setAdminAccess } from "@/lib/cloud";
 import { ApiError, getSample } from "@/lib/api";
 import { downloadWorkbook, importWorkbook, readSpreadsheet } from "@/lib/excel";
 import { useAccess } from "@/lib/access";
+import { useMemberAccess } from "@/lib/members";
 import { ensureAwake } from "@/lib/server";
 import { useCollege } from "@/lib/store";
 import { START_TEMPLATES } from "@/lib/templates";
@@ -17,6 +18,7 @@ import ImportReport, { type Report } from "./ImportReport";
 import StepReview from "./StepReview";
 import { StepRooms, StepSections, StepSubjects, StepTeachers } from "./StepTables";
 import StepWeek from "./StepWeek";
+import PageLoading from "@/components/ui/PageLoading";
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -66,23 +68,39 @@ const STEPS: StepInfo[] = [
   },
 ];
 
-function ViewerNotice({ code, onNewCollege }: { code: string; onNewCollege: () => void }) {
+/** Setup opened by a student, teacher or department (by mistake): say where their page is. */
+function ViewerNotice({ code, department, onNewCollege }: { code: string | null; department: boolean; onNewCollege: () => void }) {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-5 px-4 py-16">
-      <h1 className="text-3xl font-bold">This page is for the timetable in-charge</h1>
-      <p className="text-lg text-ink-soft">
-        Setup is where a college enters its rooms, teachers and subjects. To see your classes for college{" "}
-        <span className="font-semibold text-ink">{code}</span>, open your timetable.
-      </p>
-      <div className="flex flex-wrap gap-3">
-        <Link href="/my" className="btn-primary !px-5 !py-3 !text-base">
-          Open my timetable
-        </Link>
-        <button type="button" className="btn-quiet !px-5 !py-3 !text-base" onClick={onNewCollege}>
-          I’m setting up a new college
-        </button>
-      </div>
-    </main>
+    <>
+      <AppNav />
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-5 px-4 py-16">
+        <h1 className="text-3xl font-bold">Setup is for the Dean’s office</h1>
+        <p className="text-lg text-ink-soft">
+          {department ? (
+            "This is where the Dean sets up the whole college. Your department’s rooms, teachers and classes are on the Department page."
+          ) : (
+            <>
+              This is where the Dean sets up the college’s rooms, teachers and subjects. To see your classes
+              {code && (
+                <>
+                  {" "}
+                  for college <span className="font-semibold text-ink">{code}</span>
+                </>
+              )}
+              , open your timetable.
+            </>
+          )}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link href={department ? "/department" : "/my"} className="btn-primary !px-5 !py-3 !text-base">
+            {department ? "Open my department" : "Open my timetable"}
+          </Link>
+          <button type="button" className="btn-quiet !px-5 !py-3 !text-base" onClick={onNewCollege}>
+            I’m setting up a new college
+          </button>
+        </div>
+      </main>
+    </>
   );
 }
 
@@ -177,16 +195,20 @@ export default function SetupWizard() {
   const opening = useOpenAdminLink(loaded, data !== null, replaceData);
   const [noticeClosed, setNoticeClosed] = useState(false);
   const access = useAccess();
+  const hodLink = useMemberAccess("hod");
+  const inchargeLink = useMemberAccess("incharge");
+  const department = Boolean(hodLink || inchargeLink);
   const [newCollege, setNewCollege] = useState(false);
   const notice = noticeClosed ? null : <AdminLinkNotice state={opening} onClose={() => setNoticeClosed(true)} />;
 
-  if (!loaded || opening.kind === "loading" || access === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
-  // A student or teacher who opened a share link and tapped "Setup" by mistake.
-  if (!data && !access.staff && access.viewing && !newCollege)
-    return <ViewerNotice code={access.viewing} onNewCollege={() => setNewCollege(true)} />;
+  if (!loaded || opening.kind === "loading" || access === undefined) return <PageLoading />;
+  // A student, teacher or department who reached Setup by mistake.
+  if (!data && !access.staff && (access.viewing || department) && !newCollege)
+    return <ViewerNotice code={access.viewing} department={department} onNewCollege={() => setNewCollege(true)} />;
   if (!data)
     return (
       <>
+        <AppNav />
         {notice}
         <TemplatePicker
           onPick={(d) => {

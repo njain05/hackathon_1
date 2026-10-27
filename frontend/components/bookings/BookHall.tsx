@@ -20,6 +20,7 @@ import { useMemberAccess } from "@/lib/members";
 import { dayBlocks, formatTime } from "@/lib/periods";
 import type { CollegeData } from "@/lib/types";
 import { CollegeNeeded, usePublishedCollege } from "./common";
+import PageLoading from "@/components/ui/PageLoading";
 
 const REASON = { class: "Class", booked: "Booked", requested: "Requested" } as const;
 
@@ -41,9 +42,12 @@ function PeriodPicker({
   const allFree = (a: number, b: number) => [...Array(b - a + 1)].every((_, i) => free(a + i));
 
   // Tap one period, then another to stretch the booking across the periods between.
+  // Tapping an end of the selection takes that period off again.
   const pick = (p: number) => {
     if (start === null || end === null) return onPick(p, p);
     if (p === start && p === end) return onPick(null, null);
+    if (p === start) return onPick(start + 1, end);
+    if (p === end) return onPick(start, end - 1);
     if (p < start && allFree(p, end)) return onPick(p, end);
     if (p > end && allFree(start, p)) return onPick(start, p);
     onPick(p, p);
@@ -77,7 +81,7 @@ function PeriodPicker({
           );
         })}
       </div>
-      <p className="hint">Tap a free period, then tap another to book everything between them.</p>
+      <p className="hint">Tap a free period, then tap another to book everything between them. Tap the first or last one again to take it off.</p>
     </div>
   );
 }
@@ -102,6 +106,7 @@ export default function BookHall() {
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [showMissing, setShowMissing] = useState(false);
+  const [clash, setClash] = useState<string | null>(null);
 
   const code = college.kind === "ready" ? college.college.code : null;
   const key = `${code}|${roomId}|${date}`;
@@ -121,7 +126,7 @@ export default function BookHall() {
   // A teacher's link on this device: the request goes to their HOD, then the Dean (else, a club's: to the Dean).
   const teacherLink = useMemberAccess("teacher");
 
-  if (college.kind === "loading") return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (college.kind === "loading") return <PageLoading />;
   if (college.kind === "none") return <CollegeNeeded title="Book a room" error={college.error} />;
   const teacher = teacherLink && teacherLink.college_code === college.college.code ? teacherLink : null;
 
@@ -132,14 +137,20 @@ export default function BookHall() {
   const end = range.key === key ? range.end : null;
   const attendees = Number(form.attendees);
   const tooMany = room && attendees > room.capacity;
+  const biggest = rooms.reduce<(typeof rooms)[number] | null>((b, r) => (!b || r.capacity > b.capacity ? r : b), null);
+  const tooManyText = !tooMany
+    ? ""
+    : biggest && attendees > biggest.capacity
+      ? `No room seats ${attendees}. The biggest is ${biggest.name || biggest.id}, with ${biggest.capacity} seats.`
+      : `${room.name || room.id} seats only ${room.capacity}. Choose a bigger room or fewer people.`;
   // What's still missing, in order, with the field to jump to.
   const missing: { id: string; text: string }[] = [
-    ...(!room ? [{ id: "book-room", text: "Choose a hall." }] : []),
+    ...(!room ? [{ id: "book-room", text: "Choose a room." }] : []),
     ...(!date ? [{ id: "book-date", text: "Choose a date." }] : []),
     ...(room && date && (start === null || end === null) ? [{ id: "book-periods", text: "Tap the free periods you need." }] : []),
     ...(!form.title.trim() ? [{ id: "book-title", text: "Give the event a name." }] : []),
     ...(!(attendees >= 1) ? [{ id: "book-attendees", text: "Say how many people you expect." }] : []),
-    ...(tooMany ? [{ id: "book-attendees", text: `${room?.name || room?.id} seats only ${room?.capacity}. Choose a bigger hall or fewer people.` }] : []),
+    ...(tooMany ? [{ id: "book-attendees", text: tooManyText }] : []),
     ...(!form.organiser.trim() && !teacher ? [{ id: "book-organiser", text: "Add your name." }] : []),
     ...(!form.club.trim() && !teacher ? [{ id: "book-club", text: "Add your club or department." }] : []),
     ...(form.contact.trim().length < 3 ? [{ id: "book-contact", text: "Add a phone number or email." }] : []),
@@ -148,14 +159,18 @@ export default function BookHall() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (missing.length || start === null || end === null) {
+      // Show what's missing right where they pressed Send; each item jumps to its field.
       setShowMissing(true);
-      const first = document.getElementById(missing[0]?.id ?? "");
-      first?.focus();
-      first?.scrollIntoView({ block: "center" });
+      requestAnimationFrame(() => {
+        const list = document.getElementById("book-missing");
+        list?.scrollIntoView({ block: "center", behavior: "smooth" });
+        list?.focus({ preventScroll: true });
+      });
       return;
     }
     setSending(true);
     setError(null);
+    setClash(null);
     try {
       const b = await requestBooking(college.college.code, {
         room_id: roomId, date, start_period: start, end_period: end, title: form.title.trim(), purpose: form.purpose.trim(),
@@ -165,11 +180,15 @@ export default function BookHall() {
       rememberBooking(b);
       router.push(`/track/${encodeURIComponent(b.token)}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't send the request. Try again.");
-      // Someone else just took one of these periods: show the latest free ones. Otherwise keep the choice.
+      // Someone else just took one of these periods: say so by the periods and show the latest free ones.
       if (err instanceof ApiError && err.cause === 409) {
+        setClash(`${err.message} The free periods below are up to date: choose again.`);
+        setShowMissing(false);
         setReload((r) => r + 1);
         setRange({ key: "", start: null, end: null });
+        requestAnimationFrame(() => document.getElementById("book-periods")?.scrollIntoView({ block: "center", behavior: "smooth" }));
+      } else {
+        setError(err instanceof ApiError ? err.message : "Couldn't send the request. Try again.");
       }
       setSending(false);
     }
@@ -230,8 +249,13 @@ export default function BookHall() {
                 <span className="field-label">Date</span>
                 <input id="book-date" type="date" className="field w-fit" min={todayIso()} value={date} onChange={(e) => setDate(e.target.value)} />
               </label>
+              {clash && (
+                <p role="alert" className="rounded-md bg-blush px-3 py-2 font-semibold text-err">
+                  {clash}
+                </p>
+              )}
               {!roomId || !date ? (
-                <p className="hint">Choose a hall and a date to see its free periods.</p>
+                <p className="hint">Choose a room and a date to see its free periods.</p>
               ) : !current ? (
                 <p className="hint">Checking which periods are free…</p>
               ) : current.error ? (
@@ -246,7 +270,10 @@ export default function BookHall() {
                     slots={current.value}
                     start={start}
                     end={end}
-                    onPick={(s, e) => setRange({ key, start: s, end: e })}
+                    onPick={(s, e) => {
+                      setClash(null);
+                      setRange({ key, start: s, end: e });
+                    }}
                   />
                   {start !== null && end !== null && (
                     <p className="font-semibold">Selected: {periodText(data, start, end)}</p>
@@ -277,11 +304,7 @@ export default function BookHall() {
                   // Digits only: no scroll-wheel surprises and no "e" as in a number box.
                   onChange={(e) => setForm({ ...form, attendees: e.target.value.replace(/\D/g, "") })}
                 />
-                {tooMany && (
-                  <span className="font-semibold text-err">
-                    Too many for this hall. Choose a bigger one or lower the number.
-                  </span>
-                )}
+                {tooMany && <span className="font-semibold text-err">{tooManyText}</span>}
               </label>
             </fieldset>
 
@@ -304,19 +327,21 @@ export default function BookHall() {
               <p className="hint">Only the approvers see your phone or email, so they can reach you about the booking.</p>
             </fieldset>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <button type="submit" className="btn-primary !px-5 !py-3 !text-base" disabled={sending}>
-                {sending ? "Sending…" : "Send booking request"}
-              </button>
-
-            </div>
             {showMissing && missing.length > 0 && (
-              <div role="alert" className="rounded-md bg-blush p-3">
+              <div id="book-missing" tabIndex={-1} role="alert" className="rounded-md bg-blush p-3 outline-none">
                 <p className="font-semibold">Before sending:</p>
                 <ul className="list-disc pl-5">
                   {missing.map((m, i) => (
                     <li key={i}>
-                      <button type="button" className="text-left underline" onClick={() => document.getElementById(m.id)?.focus()}>
+                      <button
+                        type="button"
+                        className="text-left underline"
+                        onClick={() => {
+                          const field = document.getElementById(m.id);
+                          field?.scrollIntoView({ block: "center", behavior: "smooth" });
+                          field?.focus({ preventScroll: true });
+                        }}
+                      >
                         {m.text}
                       </button>
                     </li>
@@ -324,6 +349,11 @@ export default function BookHall() {
                 </ul>
               </div>
             )}
+            <div className="flex flex-wrap items-center gap-4">
+              <button type="submit" className="btn-primary !px-5 !py-3 !text-base" disabled={sending}>
+                {sending ? "Sending…" : "Send booking request"}
+              </button>
+            </div>
             {error && (
               <p role="alert" className="font-semibold text-err">
                 {error}

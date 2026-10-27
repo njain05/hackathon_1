@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
 import AskBox from "@/components/ask/AskBox";
-import { ChangesFeed, ChangesUnknown, useMyDay } from "@/components/changes/MyChanges";
+import { ChangesChecking, ChangesFeed, ChangesUnknown, useMyDay } from "@/components/changes/MyChanges";
 import { CollegeCodeForm, OpenCollegePage } from "@/components/share/OpenCollege";
 import { localNow } from "@/lib/ask";
 import { isoDate, nextDateFor } from "@/lib/changes";
@@ -16,6 +16,7 @@ import type { CollegeData, Entry } from "@/lib/types";
 import CalendarExport from "./CalendarExport";
 import { choices } from "./TimetablePage";
 import TimetableGrid, { nameLookup, SubjectKey } from "./TimetableGrid";
+import PageLoading from "@/components/ui/PageLoading";
 
 const ME_KEY = "timetable.me.v1";
 
@@ -179,7 +180,8 @@ export default function MyTimetable() {
   }, [rawMe]);
   const [role, setRole] = useState<Me["role"] | null>(null);
 
-  if (source.kind === "loading" || rawMe === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  // Wait for the clock too (a moment after opening), so Today never pushes the week down.
+  if (source.kind === "loading" || rawMe === undefined || !clock) return <PageLoading />;
   if (source.kind === "none")
     return (
       <>
@@ -198,6 +200,7 @@ export default function MyTimetable() {
   // The Today card uses the day as it actually is; the week grid stays as published.
   const actualToday = myDay.day && clock && myDay.day.day === clock.day ? entriesFor(myDay.day.entries, activeRole, myId) : null;
   const todayEntries = actualToday && clock ? [...mine.filter((e) => e.day !== clock.day), ...actualToday] : mine;
+  const classesToday = mine.some((e) => e.day === clock.day);
   const periodNow =
     clock &&
     buildRows(data, mine)
@@ -206,7 +209,7 @@ export default function MyTimetable() {
 
   return (
     <>
-      <AppNav collegeName={data.name} />
+      <AppNav collegeName={source.kind === "published" ? source.college.name : data.name} />
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold sm:text-3xl">{myLabel ? `My timetable: ${myLabel}` : "My timetable"}</h1>
@@ -284,14 +287,8 @@ export default function MyTimetable() {
                   key={r}
                   type="button"
                   aria-pressed={activeRole === r}
-                  onClick={() => {
-                    setRole(r);
-                    // Remember the role too; each role keeps its own section or name.
-                    if (me) {
-                      const ids = { [me.role]: me.id || undefined, ...me.ids };
-                      writeLocal(ME_KEY, JSON.stringify({ role: r, id: ids[r] ?? "", ids }));
-                    }
-                  }}
+                  // Only looking: the role is remembered once a section or name is chosen.
+                  onClick={() => setRole(r)}
                   className={`rounded px-4 py-2 text-sm font-semibold ${activeRole === r ? "bg-sky/50" : "hover:bg-blush"}`}
                 >
                   {r === "section" ? "I'm a student" : "I'm a teacher"}
@@ -303,7 +300,8 @@ export default function MyTimetable() {
               <select
                 value={myId}
                 onChange={(e) => {
-                  const ids = { ...me?.ids, [activeRole]: e.target.value || undefined };
+                  // Each role keeps its own section or name, so switching back finds it again.
+                  const ids = { ...(me ? { [me.role]: me.id || undefined } : {}), ...me?.ids, [activeRole]: e.target.value || undefined };
                   writeLocal(ME_KEY, JSON.stringify({ role: activeRole, id: e.target.value, ids }));
                   setPicking(false);
                 }}
@@ -331,16 +329,19 @@ export default function MyTimetable() {
           </p>
         ) : (
           <>
-            {source.kind === "published" && dateIso && myDay.day && (
-              <ChangesFeed data={data} me={{ role: activeRole, id: myId }} date={dateIso} upcoming={myDay.upcoming} />
-            )}
-            {source.kind === "published" && !myDay.day && myDay.error && <ChangesUnknown error={myDay.error} onRetry={myDay.retry} />}
-            {clock && (
-              <section className="flex flex-col gap-3 print:hidden" aria-label="Today">
-                <h2 className="text-xl font-bold">Today</h2>
-                <TodayPanel data={data} entries={todayEntries} role={activeRole} clock={clock} />
-              </section>
-            )}
+            {source.kind === "published" &&
+              dateIso &&
+              (myDay.day ? (
+                <ChangesFeed data={data} me={{ role: activeRole, id: myId }} date={dateIso} upcoming={myDay.upcoming} noClassesToday={!classesToday} />
+              ) : myDay.error ? (
+                <ChangesUnknown error={myDay.error} onRetry={myDay.retry} />
+              ) : (
+                classesToday && <ChangesChecking />
+              ))}
+            <section className="flex flex-col gap-3 print:hidden" aria-label="Today">
+              <h2 className="text-xl font-bold">Today</h2>
+              <TodayPanel data={data} entries={todayEntries} role={activeRole} clock={clock} />
+            </section>
             <section className="flex flex-col gap-3">
               <h2 className="text-xl font-bold print:hidden">Your week</h2>
               <TimetableGrid
@@ -356,7 +357,7 @@ export default function MyTimetable() {
           </>
         )}
 
-        {source.kind === "published" && (
+        {source.kind === "published" && myId && (
           <AskBox
             code={source.college.code}
             examples={
@@ -366,7 +367,7 @@ export default function MyTimetable() {
             }
             context={() => ({
               now: localNow(dateIso ?? isoDate(new Date()), clock?.minutes),
-              me: myId ? { role: activeRole, id: myId } : null,
+              me: { role: activeRole, id: myId },
             })}
           />
         )}

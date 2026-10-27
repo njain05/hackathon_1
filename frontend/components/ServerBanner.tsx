@@ -1,10 +1,30 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { ensureAwake, useServerStatus } from "@/lib/server";
 
-/** Shown on every page while a sleeping server starts up, or if it can't be reached. */
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
+/** Shown on every page while a sleeping server starts up, if it can't be reached, or if this device is offline. */
 export default function ServerBanner() {
   const status = useServerStatus();
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+  if (!online)
+    return (
+      <div role="status" aria-live="polite" className="border-b border-line bg-blush px-4 py-2.5 text-sm sm:px-6 print:hidden">
+        <p>
+          <span className="font-semibold">You’re offline.</span>{" "}
+          <span className="text-ink-soft">Showing what’s saved on this device. It updates by itself when you’re back online.</span>
+        </p>
+      </div>
+    );
   if (status !== "waking" && status !== "down") return null;
   return (
     <div role="status" aria-live="polite" className="border-b border-line bg-blush px-4 py-2.5 text-sm sm:px-6 print:hidden">

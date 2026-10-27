@@ -67,16 +67,42 @@ export function ChangesUnknown({ error, onRetry }: { error: string; onRetry: () 
   );
 }
 
-/** "Changes today" at the top of My timetable, then what's coming up this week. */
-export function ChangesFeed({ data, me, date, upcoming }: { data: CollegeData; me: ChangeViewer; date: string; upcoming: Change[] }) {
-  const mine = upcoming.filter((c) => affects(c, me));
-  const today = mine.filter((c) => c.date === date);
-  const later = mine.filter((c) => c.date !== date);
+/** Holds the place of "Changes today" while they load, so the page doesn't jump when they arrive. */
+export function ChangesChecking() {
   return (
     <section aria-label="Changes" className="flex flex-col gap-3 print:hidden">
       <h2 className="text-xl font-bold">Changes today</h2>
+      <p className="text-ink-soft">Checking for cancelled classes and substitutes…</p>
+    </section>
+  );
+}
+
+/**
+ * "Changes today" at the top of My timetable, then what's coming up this week.
+ * `noClassesToday`: say nothing about today unless something was added.
+ */
+export function ChangesFeed({
+  data,
+  me,
+  date,
+  upcoming,
+  noClassesToday = false,
+}: {
+  data: CollegeData;
+  me: ChangeViewer;
+  date: string;
+  upcoming: Change[];
+  noClassesToday?: boolean;
+}) {
+  const mine = upcoming.filter((c) => affects(c, me));
+  const today = mine.filter((c) => c.date === date);
+  const later = mine.filter((c) => c.date !== date);
+  if (noClassesToday && today.length === 0 && later.length === 0) return null;
+  return (
+    <section aria-label="Changes" className="flex flex-col gap-3 print:hidden">
+      {!(noClassesToday && today.length === 0) && <h2 className="text-xl font-bold">Changes today</h2>}
       {today.length === 0 ? (
-        <p className="text-ink-soft">No changes today. Classes run as usual.</p>
+        !noClassesToday && <p className="text-ink-soft">No changes today. Classes run as usual.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {today.map((c) => (

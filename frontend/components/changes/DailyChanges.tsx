@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { ApiError } from "@/lib/api";
-import { periodText, since } from "@/lib/bookings";
+import { ago, periodText } from "@/lib/bookings";
 import {
   type AffectedClass,
   type CoverView,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/changes";
 import { type AdminAccess, getPublished, useAdminAccess } from "@/lib/cloud";
 import type { CollegeData } from "@/lib/types";
+import PageLoading from "@/components/ui/PageLoading";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -449,7 +450,7 @@ export default function DailyChanges() {
   const v = current?.value;
   const changeLines = useMemo(() => (v && college ? v.changes.map((c) => ({ c, text: changeText(c, college, { role: "admin" }) })) : []), [v, college]);
 
-  if (admin === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (admin === undefined) return <PageLoading />;
   if (!admin)
     return (
       <>
@@ -458,7 +459,7 @@ export default function DailyChanges() {
           <h1 className="text-3xl font-bold">Daily changes</h1>
           <p className="text-lg text-ink-soft">
             Leave, substitutes and extra classes for the whole college are arranged here by the Dean. Open the Dean’s link first, then
-            come back here. Teachers can report their own leave on the My timetable page.
+            come back here. Teachers ask for leave with their own teacher link, and their HOD approves it.
           </p>
           <Link href="/my" className="btn-quiet w-fit">
             My timetable
@@ -568,7 +569,7 @@ export default function DailyChanges() {
                         <div className="flex flex-wrap items-center gap-2 rounded-md bg-blush px-3 py-2">
                           <span className="mr-auto">
                             <span className="font-semibold">Waiting for {lv.waiting_for}</span>
-                            {lv.waiting_since && ` since ${since(lv.waiting_since)}`}. Cover can be arranged once it is approved.
+                            {lv.waiting_since && `, asked ${ago(lv.waiting_since)}`}. Cover can be arranged once it is approved.
                           </span>
                           <button type="button" className="btn-quiet !py-1" disabled={busy}
                             onClick={() => act(() => decideLeave(admin.code, lv.id, "approve", "", { admin }), "Couldn't approve the leave.")}>

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { CopyField } from "@/components/share/CloudSave";
 import { ApiError } from "@/lib/api";
-import { type Booking, cancelBooking, rememberBooking, trackBooking, trackLink } from "@/lib/bookings";
+import { type Booking, cancelBooking, refreshRememberedBooking, trackBooking, trackLink } from "@/lib/bookings";
 import { getPublished } from "@/lib/cloud";
 import type { CollegeData } from "@/lib/types";
 import { BookingFacts, History, StatusBadge, StepsTrail, whereItIs } from "./common";
@@ -23,7 +23,7 @@ export default function TrackBooking({ token }: { token: string }) {
       .then((x) => {
         setB(x);
         setError(null);
-        rememberBooking(x);
+        refreshRememberedBooking(x); // keeps "Requests sent from this device" up to date, without adding links only viewed here
         setChecked({ checking: false, at: new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) });
       })
       .catch((e: unknown) => {
@@ -59,7 +59,7 @@ export default function TrackBooking({ token }: { token: string }) {
               <h1 className="text-3xl font-bold">Request not found</h1>
               <p className="text-lg text-err">{error}</p>
               <Link href="/book" className="btn-primary w-fit">
-                Book a hall
+                Book a room
               </Link>
             </>
           ) : (
@@ -133,12 +133,12 @@ export default function TrackBooking({ token }: { token: string }) {
             </button>
           )}
           {(b.status === "rejected" || b.status === "cancelled") && (
-            <Link href="/book" className="btn-primary">
+            <Link href={`/book?college=${encodeURIComponent(b.college_code)}`} className="btn-primary">
               Book another time
             </Link>
           )}
           {b.status === "approved" && (
-            <Link href="/events" className="btn-quiet">
+            <Link href={`/events?college=${encodeURIComponent(b.college_code)}`} className="btn-quiet">
               See the events calendar
             </Link>
           )}

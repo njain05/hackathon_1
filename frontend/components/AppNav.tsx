@@ -41,7 +41,7 @@ export default function AppNav({ collegeName }: { collegeName?: string }) {
     ...(incharge || hod ? [{ href: "/department", label: "Department" }] : []),
     ...(admin ? [{ href: "/people", label: "People" }] : []),
     { href: "/my", label: "My timetable" },
-    { href: "/book", label: "Book a hall" },
+    { href: "/book", label: "Book a room" },
     { href: "/events", label: "Events" },
   ];
   // Never hide just one link behind "More".

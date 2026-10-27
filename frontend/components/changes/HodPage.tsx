@@ -15,6 +15,7 @@ import HodRequests from "@/components/bookings/HodRequests";
 import { type DepartmentState, STATE_TEXT, departmentStatus } from "@/lib/departments";
 import HodCover from "./HodCover";
 import { LeaveBadge, leaveStatusText } from "./TeacherPage";
+import PageLoading from "@/components/ui/PageLoading";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -135,7 +136,7 @@ export default function HodPage() {
       .catch(() => undefined);
   }, [code]);
 
-  if (hod === undefined || opening.opening) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (hod === undefined || opening.opening) return <PageLoading />;
 
   if (!hod)
     return (

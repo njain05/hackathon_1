@@ -17,6 +17,7 @@ import {
   saveMemberLink,
   useSavedMemberLinks,
 } from "@/lib/members";
+import PageLoading from "@/components/ui/PageLoading";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -45,7 +46,7 @@ export default function PeopleLinks() {
     load();
   }, [load]);
 
-  if (admin === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (admin === undefined) return <PageLoading />;
   if (!admin)
     return (
       <>

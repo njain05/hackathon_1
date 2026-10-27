@@ -14,6 +14,7 @@ import type { CollegeData, Entry } from "@/lib/types";
 import ExportButtons from "./ExportButtons";
 import { CheckSummary } from "./QualityPanel";
 import TimetableGrid, { SubjectKey } from "./TimetableGrid";
+import PageLoading from "@/components/ui/PageLoading";
 
 const VIEWS: { id: ViewKind; label: string; noun: string }[] = [
   { id: "section", label: "By section", noun: "Section" },
@@ -93,7 +94,7 @@ export default function TimetablePage() {
   const [picked, setPicked] = useState<Partial<Record<ViewKind, string>>>({});
   const [printAll, setPrintAll] = useState(false);
 
-  if (stored === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (stored === undefined) return <PageLoading />;
   if (stored === null)
     return (
       <>

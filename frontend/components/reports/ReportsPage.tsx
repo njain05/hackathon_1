@@ -9,6 +9,7 @@ import { LOW_USE, oneDecimal, percent, plural, roomUsage, sectionLoad, teacherWo
 import { useStoredTimetable } from "@/lib/result";
 import { RoomReport, SectionReport } from "./UsageReports";
 import WorkloadReport from "./WorkloadReport";
+import PageLoading from "@/components/ui/PageLoading";
 
 function Note({ title, children, action }: { title: string; children: React.ReactNode; action: React.ReactNode }) {
   return (
@@ -44,7 +45,7 @@ export default function ReportsPage() {
     };
   }, [stored]);
 
-  if (access === undefined || stored === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (access === undefined || stored === undefined) return <PageLoading />;
 
   if (!access.staff)
     return (

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
 import { CollegeCodeForm } from "@/components/share/OpenCollege";
-import { type Booking, dateText, periodText, since, STATUS_TEXT } from "@/lib/bookings";
+import { ago, type Booking, dateText, periodText, STATUS_TEXT } from "@/lib/bookings";
 import { type PublicTimetable, useAdminAccess, useViewerTimetable } from "@/lib/cloud";
 import type { CollegeData } from "@/lib/types";
 
@@ -33,7 +33,7 @@ export function CollegeNeeded({ title, error }: { title: string; error?: string 
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-5 px-4 py-16">
         <h1 className="text-3xl font-bold">{title}</h1>
         <p className="text-lg text-ink-soft">
-          Type your college code, or open the link your college shared. Halls can be booked once the college has
+          Type your college code, or open the link your college shared. Rooms can be booked once the college has
           published its timetable.
         </p>
         <CollegeCodeForm error={error} />
@@ -59,9 +59,9 @@ export function StatusBadge({ status }: { status: Booking["status"] }) {
   return <span className={`rounded-full px-3 py-1 text-sm font-semibold ${BADGE[status]}`}>{STATUS_TEXT[status]}</span>;
 }
 
-/** "Waiting for Dean since 2 hours", "Approved by Dean", "Not approved by HOD". */
+/** "Waiting for Dean, sent 2 hours ago", "Approved by Dean", "Not approved by HOD". */
 export function whereItIs(b: Booking): string {
-  if (b.status === "pending") return `Waiting for ${b.waiting_for}${b.waiting_since ? ` since ${since(b.waiting_since)}` : ""}`;
+  if (b.status === "pending") return `Waiting for ${b.waiting_for}${b.waiting_since ? `, sent ${ago(b.waiting_since)}` : ""}`;
   const last = b.history[b.history.length - 1];
   if (b.status === "approved") return `Approved${last ? ` by ${last.step_title}` : ""}. The room is yours.`;
   if (b.status === "rejected") return `Not approved${last ? ` by ${last.step_title}` : ""}`;
@@ -90,7 +90,7 @@ export function StepsTrail({ b }: { b: Booking }) {
         <span className="block text-xs text-ink-soft">Sent</span>
         {b.organiser}
       </li>
-      {b.steps.map((s, i) => (
+      {b.steps.filter((s) => b.status === "pending" || b.status === "approved" || s.state !== "later").map((s, i) => (
         <li key={i} className="flex items-center gap-2">
           <span aria-hidden className="text-ink-soft">
             →

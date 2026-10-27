@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { downloadCsv, downloadWorkbook, importTable, readSpreadsheet } from "@/lib/excel";
 import { renameRefs } from "@/lib/store";
 import { importGrid, type Column, type RowError, type TableSpec } from "@/lib/tables";
@@ -34,17 +34,40 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
   const [undo, setUndo] = useState<{ row: T; index: number; label: string } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuRef = useRef<HTMLDetailsElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // "Download template" closes on Escape and on a click elsewhere, like the other menus.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => {
+      if (menuRef.current) menuRef.current.open = false;
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const click = (e: MouseEvent) => menuRef.current && !menuRef.current.contains(e.target as Node) && close();
+    document.addEventListener("keydown", key);
+    document.addEventListener("mousedown", click);
+    return () => {
+      document.removeEventListener("keydown", key);
+      document.removeEventListener("mousedown", click);
+    };
+  }, [menuOpen]);
 
   const rowLabel = (row: T, i: number) => {
     const code = spec.codeKey ? String((row as Record<string, unknown>)[spec.codeKey] ?? "").trim() : "";
-    return code ? `${spec.noun} ${code}` : `row ${i + 1}`;
+    if (code) return `${spec.noun} ${code}`;
+    // No code (e.g. "who teaches what"): name the row by its first two cells.
+    const first = spec.columns
+      .slice(0, 2)
+      .map((c) => String((row as Record<string, unknown>)[c.key] ?? "").trim())
+      .filter(Boolean);
+    return first.length ? `row ${i + 1} (${first.join(", ")})` : `row ${i + 1}`;
   };
   const deleteRow = (i: number) => {
     const row = rows[i];
     setRows(rows.filter((_, j) => j !== i));
     setUndo({ row, index: i, label: rowLabel(row, i) });
     if (undoTimer.current) clearTimeout(undoTimer.current);
-    undoTimer.current = setTimeout(() => setUndo(null), 8000);
+    undoTimer.current = setTimeout(() => setUndo(null), 12000);
   };
   const restoreRow = () => {
     if (!undo) return;
@@ -130,7 +153,7 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
             e.target.value = "";
           }}
         />
-        <details className="relative" ref={menuRef}>
+        <details className="relative" ref={menuRef} onToggle={(e) => setMenuOpen(e.currentTarget.open)}>
           <summary className="btn-quiet list-none cursor-pointer">Download template</summary>
           <div className="absolute z-20 mt-1 flex w-64 flex-col rounded-md border border-line bg-paper p-1 shadow-lg">
             <button type="button" className="menu-item" onClick={() => {
@@ -200,17 +223,18 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
       {report && <ImportReport report={report} onClose={() => setReport(null)} />}
 
       {undo && (
-        <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-paper px-3 py-2 text-sm">
-          <span>
-            Deleted {undo.label}.
-          </span>
+        <div
+          role="status"
+          className="fixed bottom-24 left-1/2 z-30 flex w-[min(92vw,32rem)] -translate-x-1/2 flex-wrap items-center gap-3 rounded-md border border-line bg-paper px-4 py-3 text-sm shadow-lg"
+        >
+          <span className="mr-auto">Deleted {undo.label}.</span>
           <button type="button" className="btn-quiet !py-1" onClick={restoreRow}>
             Undo
           </button>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-md border border-line bg-paper">
+      <div className="relative overflow-x-auto rounded-md border border-line bg-paper">
         <table ref={tableRef} className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-blush text-left">
@@ -245,6 +269,12 @@ export default function DataTable<T>({ spec, data, onChange, emptyText }: Props<
                       label={`${c.header}, row ${i + 1}`}
                       onCommit={(r) => updateRow(i, r)}
                       onRename={c.key === spec.codeKey ? rename : undefined}
+                      codeTaken={
+                        c.key === spec.codeKey
+                          ? (code) => rows.some((r, j) => j !== i && String((r as Record<string, unknown>)[c.key] ?? "").trim() === code)
+                          : undefined
+                      }
+                      noun={spec.noun}
                     />
                   </td>
                 ))}
@@ -281,9 +311,12 @@ interface CellProps<T> {
   label: string;
   onCommit: (row: T) => void;
   onRename?: (from: string, to: string) => void;
+  /** For the code column: is this code already used by another row? */
+  codeTaken?: (code: string) => boolean;
+  noun?: string;
 }
 
-function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
+function Cell<T>({ col, row, data, label, onCommit, onRename, codeTaken, noun = "row" }: CellProps<T>) {
   const value =
     col.kind === "select"
       ? col.selectValue
@@ -295,6 +328,8 @@ function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [original, setOriginal] = useState("");
+  /** What happened when leaving the cell (a code or number put back), until the next edit. */
+  const [note, setNote] = useState<string | null>(null);
   const errorId = useId();
 
   // Follow outside changes (import, rename, undo) while the admin isn't typing here.
@@ -351,13 +386,15 @@ function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
     }
   };
 
+  const taken = (raw: string) => Boolean(onRename && raw.trim() && raw.trim() !== original && codeTaken?.(raw.trim()));
   const showError = error && (focused || col.kind === "text");
+  const message = showError ? error : note;
   return (
     <div>
       <input
         aria-label={label}
         aria-invalid={!!error}
-        aria-describedby={showError ? errorId : undefined}
+        aria-describedby={message ? errorId : undefined}
         type="text"
         inputMode={col.kind === "number" ? "numeric" : undefined}
         placeholder={col.placeholder ? `e.g. ${col.placeholder}` : undefined}
@@ -365,24 +402,36 @@ function Cell<T>({ col, row, data, label, onCommit, onRename }: CellProps<T>) {
         onFocus={() => {
           setFocused(true);
           setOriginal(value);
+          setNote(null);
         }}
         onChange={(e) => {
           setDraft(e.target.value);
           commit(e.target.value);
+          if (taken(e.target.value)) setError(`${e.target.value.trim()} is already used by another ${noun}. Codes must be different.`);
         }}
         onBlur={() => {
           setFocused(false);
           if (col.kind === "number" && error) {
-            setDraft(value); // put back the last good number
+            setDraft(value); // put back the last good number, and say so
             setError(null);
+            setNote(`“${draft}” isn’t a valid number, so it’s back to ${value || "empty"}.`);
           }
-          if (onRename && original && value && original !== value) onRename(original, value);
+          if (onRename && original) {
+            const now = value.trim();
+            if (!now || taken(now)) {
+              // Never move classes to another row's code, or leave them pointing at nothing.
+              commit(original);
+              setDraft(original);
+              setError(null);
+              setNote(!now ? `A code can’t be empty, so it’s back to ${original}.` : `${now} is already used, so this stays ${original}.`);
+            } else if (now !== original) onRename(original, now);
+          }
         }}
         className={`cell ${error ? "cell-invalid" : ""}`}
       />
-      {showError && (
-        <p id={errorId} className="px-1 pt-0.5 text-xs text-err">
-          {error}
+      {message && (
+        <p id={errorId} role={note && !showError ? "status" : undefined} className="px-1 pt-0.5 text-xs text-err">
+          {message}
         </p>
       )}
     </div>

@@ -210,6 +210,12 @@ export function rememberBooking(b: Booking) {
   writeLocal(MINE_KEY, JSON.stringify([{ token: b.token, title: b.title, code: b.college_code }, ...list.filter((x) => x.token !== b.token)].slice(0, 30)));
 }
 
+/** A request opened again: update its title if it was sent from this browser; never add one only viewed here. */
+export function refreshRememberedBooking(b: Booking) {
+  const list = parse<{ token: string; title: string; code: string }[]>(readLocal(MINE_KEY)) ?? [];
+  if (list.some((x) => x.token === b.token)) rememberBooking(b);
+}
+
 /** Approver links the admin made in this browser (keys are only shown once by the server). */
 export function useSavedApproverLinks(code: string | undefined): Record<string, string> {
   const raw = useLocal(LINKS_KEY);
@@ -254,15 +260,15 @@ export function dateText(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
-/** "2 hours", "3 days": how long something has been waiting. */
-export function since(iso: string, now = Date.now()): string {
+/** "just now", "5 minutes ago", "2 hours ago", "3 days ago". */
+export function ago(iso: string, now = Date.now()): string {
   const mins = Math.max(0, Math.round((now - Date.parse(iso)) / 60000));
-  if (mins < 1) return "less than a minute";
-  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"}`;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
   const hours = Math.round(mins / 60);
-  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.round(hours / 24);
-  return `${days} days`;
+  return `${days} days ago`;
 }
 
 /** Today in the browser's time zone, as YYYY-MM-DD. */

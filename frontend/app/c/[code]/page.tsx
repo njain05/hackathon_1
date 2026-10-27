@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import OpenShareLink from "@/components/share/OpenShareLink";
+import PageLoading from "@/components/ui/PageLoading";
 
 export const metadata: Metadata = {
   title: "My timetable | College Timetable",
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 /** The public share link: /c/<slug or code>. */
 export default function Page({ params }: PageProps<"/c/[code]">) {
   return (
-    <Suspense fallback={<p className="p-8 text-ink-soft">Opening the timetable…</p>}>
+    <Suspense fallback={<PageLoading text="Opening the timetable…" />}>
       <Open params={params} />
     </Suspense>
   );

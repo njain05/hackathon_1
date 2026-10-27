@@ -5,11 +5,11 @@ import { useId, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { getCollege, setViewedCollege } from "@/lib/cloud";
 
-/** "K7M2QP", "k7m2qp" or a pasted share link ".../c/gndec-ludhiana" → the code or slug. */
+/** "K7M2QP", "k7m 2qp" or a pasted share link ".../c/gndec-ludhiana" → the code or slug. */
 function parseRef(text: string): string {
   const t = text.trim();
   const fromLink = t.match(/\/c\/([^/?#\s]+)/);
-  return fromLink ? decodeURIComponent(fromLink[1]) : t;
+  return fromLink ? decodeURIComponent(fromLink[1]) : t.replace(/\s+/g, ""); // "K7M 2QP" as read aloud
 }
 
 /** Type a college code or paste the share link. */

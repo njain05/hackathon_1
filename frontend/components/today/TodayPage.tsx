@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api";
 import { getApprovals } from "@/lib/bookings";
 import { type CoverView, getCover, isoDate } from "@/lib/changes";
 import { type AdminCollege, getAdminCollege, useAdminAccess } from "@/lib/cloud";
+import PageLoading from "@/components/ui/PageLoading";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -57,7 +58,7 @@ export default function TodayPage() {
     return () => document.removeEventListener("visibilitychange", again);
   }, [load]);
 
-  if (admin === undefined) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (admin === undefined) return <PageLoading />;
   if (!admin)
     return (
       <>

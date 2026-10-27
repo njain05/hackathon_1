@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ApiError } from "@/lib/api";
+import { ApiError, call } from "@/lib/api";
 import { type AskRequest, type AskTurn, askTimetable } from "@/lib/ask";
 
 interface Props {
@@ -13,8 +13,34 @@ interface Props {
   context: () => Omit<AskRequest, "question" | "history">;
 }
 
+// Asked once per page load: is the helper set up on this server (ANTHROPIC_API_KEY)?
+let helperReady: Promise<boolean> | null = null;
+
+function useHelperReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    helperReady ??= call<{ ready: boolean }>("/assistant/status")
+      .then((r) => r.ready)
+      .catch(() => {
+        helperReady = null; // asleep or offline: ask again next time
+        return false;
+      });
+    let live = true;
+    void helperReady.then((r) => live && setReady(r));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return ready;
+}
+
 /** "Ask the timetable": plain-English questions, answered only from the real timetable by a Claude helper. */
-export default function AskBox({ code, examples, context }: Props) {
+export default function AskBox(props: Props) {
+  // Not set up (or not known yet): show nothing rather than a box that can only say no.
+  return useHelperReady() ? <Ask {...props} /> : null;
+}
+
+function Ask({ code, examples, context }: Props) {
   const [turns, setTurns] = useState<AskTurn[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);

@@ -18,6 +18,7 @@ import {
 import { getPublished, useAdminAccess } from "@/lib/cloud";
 import type { CollegeData } from "@/lib/types";
 import { BookingFacts, History, StatusBadge, StepsTrail, whereItIs } from "./common";
+import PageLoading from "@/components/ui/PageLoading";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -156,7 +157,7 @@ export default function Approvals() {
       .catch(() => undefined);
   }, [code]);
 
-  if (admin === undefined || approver === undefined || opening) return <p className="p-8 text-ink-soft">Loading…</p>;
+  if (admin === undefined || approver === undefined || opening) return <PageLoading />;
 
   if (!auth)
     return (
@@ -170,7 +171,7 @@ export default function Approvals() {
             first, then come back here.
           </p>
           <Link href="/book" className="btn-quiet w-fit">
-            Book a hall instead
+            Book a room instead
           </Link>
         </main>
       </>
