@@ -262,6 +262,15 @@ def save_draft(
     return SavedDraft(updated_at=stamp)
 
 
+@router.delete("/{ref}/timetable", status_code=204)
+def unpublish(college: AdminCollegeDep, session: DbSession) -> None:
+    """Dean: take the timetable down. Students and teachers see "not published yet" until the next publish.
+    The setup draft, leave and bookings stay."""
+    for pub in session.scalars(select(PublishedTimetable).where(PublishedTimetable.college_id == college.id)):
+        session.delete(pub)
+    session.commit()
+
+
 @router.post("/{ref}/publish", response_model=Published)
 def publish(body: PublishRequest, college: AdminCollegeDep, session: DbSession) -> Published:
     """Admin: make this timetable the live one. It is clash-checked again first."""

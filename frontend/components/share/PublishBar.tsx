@@ -1,13 +1,88 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
-import { getCollege, publishTimetable, setLiveMark, shareLink, useAdminAccess, useLiveMark } from "@/lib/cloud";
-import type { StoredTimetable } from "@/lib/result";
+import {
+  type AdminAccess,
+  clearLiveMark,
+  getCollege,
+  publishTimetable,
+  setLiveMark,
+  shareLink,
+  unpublishTimetable,
+  useAdminAccess,
+  useLiveMark,
+} from "@/lib/cloud";
+import { type StoredTimetable, clearTimetable } from "@/lib/result";
 import { CopyField } from "./CloudSave";
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/** Take the timetable down for everyone, or delete the generated one and go back to the setup. */
+function RemoveControls({ access, published, onUnpublished }: { access: AdminAccess | null; published: boolean; onUnpublished: () => void }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const takeDown = async () => {
+    if (!access) return;
+    await unpublishTimetable(access);
+    clearLiveMark();
+    onUnpublished();
+  };
+
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't do that. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-line/70 pt-3">
+      {published && access && (
+        <button
+          type="button"
+          className="btn-quiet"
+          disabled={busy}
+          onClick={() =>
+            window.confirm("Take the timetable down? Students and teachers will see “not published yet” until you publish again.") &&
+            run(takeDown)
+          }
+        >
+          Unpublish
+        </button>
+      )}
+      <button
+        type="button"
+        className="btn-quiet"
+        disabled={busy}
+        onClick={() =>
+          window.confirm(
+            "Delete this generated timetable?" +
+              (published && access ? " It is also taken down for students and teachers." : "") +
+              " Your setup data stays, so you can change it and generate again.",
+          ) &&
+          run(async () => {
+            if (published && access) await takeDown();
+            clearTimetable();
+            router.push("/setup");
+          })
+        }
+      >
+        Delete this timetable
+      </button>
+      {error && <span className="font-semibold text-err">{error}</span>}
+    </div>
+  );
+}
 
 /** On /timetable: make the generated timetable live for students and teachers. */
 export default function PublishBar({ stored }: { stored: StoredTimetable }) {
@@ -44,11 +119,16 @@ export default function PublishBar({ stored }: { stored: StoredTimetable }) {
         <Link href="/setup" className="btn-quiet">
           Go to setup
         </Link>
+        <div className="w-full">
+          <RemoveControls access={null} published={false} onUnpublished={() => undefined} />
+        </div>
       </section>
     );
 
   const isLive = mark?.code === access.code && mark.at === stored.at;
   const liveNow = online?.code === access.code && online.version ? online : null;
+  const published = Boolean(liveNow || isLive);
+  const unpublished = () => setOnline({ code: access.code, version: null, at: null });
 
   const publish = async () => {
     setBusy(true);
@@ -75,6 +155,7 @@ export default function PublishBar({ stored }: { stored: StoredTimetable }) {
           <CopyField label="Share link" value={shareLink(access)} />
           <CopyField label="College code" value={access.code} big />
         </div>
+        <RemoveControls access={access} published={published} onUnpublished={unpublished} />
       </section>
     );
 
@@ -94,6 +175,7 @@ export default function PublishBar({ stored }: { stored: StoredTimetable }) {
         </button>
       </div>
       {error && <p className="font-semibold text-err">{error}</p>}
+      <RemoveControls access={access} published={published} onUnpublished={unpublished} />
     </section>
   );
 }

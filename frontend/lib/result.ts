@@ -17,6 +17,11 @@ export function saveTimetable(t: StoredTimetable): boolean {
   return writeLocal(RESULT_KEY, JSON.stringify(t));
 }
 
+/** Forget the generated timetable in this browser (the setup data stays). */
+export function clearTimetable(): void {
+  writeLocal(RESULT_KEY, null);
+}
+
 /**
  * The saved timetable. `undefined` while loading (server render / first paint),
  * `null` if nothing has been generated yet.

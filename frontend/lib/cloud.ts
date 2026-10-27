@@ -144,6 +144,12 @@ export function useLiveMark(): { code: string; at: string; version: number; publ
 export const setLiveMark = (m: { code: string; at: string; version: number; published_at: string }) =>
   writeLocal(LIVE_KEY, JSON.stringify(m));
 
+export const clearLiveMark = () => writeLocal(LIVE_KEY, null);
+
+/** Dean: take the timetable down; students and teachers see "not published yet" until the next publish. */
+export const unpublishTimetable = (a: AdminAccess) =>
+  call<null>(`/colleges/${enc(a.code)}/timetable`, { method: "DELETE", headers: asAdmin(a) });
+
 /** Remember the college a student or teacher opened (null forgets it). */
 export const setViewedCollege = (code: string | null) => writeLocal(VIEW_KEY, code);
 

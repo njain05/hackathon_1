@@ -186,3 +186,17 @@ def test_a_save_never_overwrites_newer_work_unseen() -> None:
     assert ok.status_code == 200
     # Older clients that send no X-Based-On keep working as before.
     assert client.put(f"/colleges/{c['code']}/data", json={"name": "v4"}, headers=admin).status_code == 200
+
+
+def test_the_dean_can_take_the_timetable_down(sample_result: SolveResult) -> None:
+    c = create()
+    admin = {"X-Admin-Key": c["admin_key"]}
+    assert client.post(f"/colleges/{c['code']}/publish", json=publish_body(sample_result), headers=admin).status_code == 200
+    assert client.delete(f"/colleges/{c['code']}/timetable").status_code == 403  # not the public
+    assert client.delete(f"/colleges/{c['code']}/timetable", headers=admin).status_code == 204
+    res = client.get(f"/colleges/{c['code']}/timetable")
+    assert res.status_code == 404 and "hasn't published" in res.json()["detail"]
+    assert client.get(f"/colleges/{c['code']}").json()["published_version"] is None
+    # Publishing again works, starting from version 1.
+    again = client.post(f"/colleges/{c['code']}/publish", json=publish_body(sample_result), headers=admin).json()
+    assert again["version"] == 1
