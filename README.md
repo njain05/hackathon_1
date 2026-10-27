@@ -1,7 +1,5 @@
 # College Timetable
 
-**One place for the whole college.** The Dean's office generates a clash-free timetable in minutes. Everyone signs in with their own username and password and sees only their own pages. Departments prepare and approve their own data, teachers ask for leave and get covered, students see what's on now and next, and clubs book rooms with digital approval instead of paper letters.
-
 ## Live links
 
 | What | Link |
@@ -16,11 +14,15 @@
 
 The frontend runs on **Vercel**, the backend on **Render** (free plan, Singapore), and the database is **Postgres on Supabase**. The free backend sleeps after about 15 minutes without visitors, so **the first visit can take up to a minute** while it wakes up (the site says "Waking up the server"). Generating a timetable there takes about 20 seconds for the sample college and about a minute for the larger demo college.
 
+## About
+
+**One place for the whole college.** The Dean's office generates a clash-free timetable in minutes. Everyone signs in with their own username and password and sees only their own pages. Departments prepare and approve their own data, teachers ask for leave and get covered, students see what's on now and next, and clubs book rooms with digital approval instead of paper letters.
+
 Built for the Punjab Jobs AI Bootcamp hackathon (J-PAL South Asia). It works for any college: nothing about days, periods, breaks, rooms or departments is hard-coded.
 
 ![A section's week: periods with clock times, tea and lunch breaks, labs as one block, a colour per subject](docs/screenshots/desktop-grid.png)
 
-**Contents:** [Live links](#live-links) · [Try it](#try-it-sign-in-as-each-person) · [Who it's for](#who-its-for) · [What it does](#what-it-does) · [How a Dean uses it](#how-a-dean-uses-it-in-5-steps) · [Screenshots](#screenshots) · [How it's built](#how-its-built) · [Run it locally](#run-it-locally) · [Limitations](#limitations-and-roadmap)
+**Contents:** [Live links](#live-links) · [About](#about) · [Try it](#try-it-sign-in-as-each-person) · [Who it's for](#who-its-for) · [What it does](#what-it-does) · [How a Dean uses it](#how-a-dean-uses-it-in-5-steps) · [Screenshots](#screenshots) · [How it's built](#how-its-built) · [Run it locally](#run-it-locally) · [Limitations](#limitations-and-roadmap)
 
 ## Try it: sign in as each person
 
