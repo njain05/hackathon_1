@@ -221,3 +221,32 @@ def test_room_sharing_needs_the_owning_hods_approval(sample_result: SolveResult)
 
     after = client.get(f"/colleges/{code}/admin", headers=c["admin"]).json()["data"]
     assert next(r for r in after["rooms"] if r["id"] == "C-101")["shared_with"] == ["ECE"]
+
+
+def test_two_people_editing_one_department_never_overwrite_each_other(sample_result: SolveResult) -> None:
+    c = setup_college(sample_result)
+    incharge = make_incharge(c["code"], c["hod"]["CSE"])
+    url = f"/colleges/{c['code']}/departments/CSE/setup"
+    hod_copy = client.get(url, headers=c["hod"]["CSE"]).json()["data"]
+    inc_copy = client.get(url, headers=incharge).json()["data"]
+
+    for r in hod_copy["rooms"]:
+        if r["id"] == "C-101":
+            r["capacity"] = 80
+    assert client.put(url, json={"data": hod_copy, "base": inc_copy}, headers=c["hod"]["CSE"]).status_code == 200
+
+    # The in-charge's page still has the old copy: their save is refused, not merged over the HOD's.
+    stale = json_copy(inc_copy)
+    for r in stale["rooms"]:
+        if r["id"] == "C-102":
+            r["capacity"] = 70
+    res = client.put(url, json={"data": stale, "base": inc_copy}, headers=incharge)
+    assert res.status_code == 409 and "Reload" in res.json()["detail"]
+    rooms = {r["id"]: r["capacity"] for r in client.get(url, headers=incharge).json()["data"]["rooms"]}
+    assert rooms["C-101"] == 80 and rooms["C-102"] != 70
+
+
+def json_copy(d: dict[str, Any]) -> dict[str, Any]:
+    import json
+
+    return json.loads(json.dumps(d))

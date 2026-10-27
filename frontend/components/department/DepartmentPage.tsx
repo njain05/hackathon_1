@@ -38,7 +38,7 @@ type SaveState =
   | { kind: "idle" }
   | { kind: "saving" }
   | { kind: "saved"; at: string; ignored: string[]; reopened: boolean }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; conflict?: boolean };
 
 const STATE_STYLE: Record<ReviewState, string> = {
   draft: "bg-cream text-ink",
@@ -62,9 +62,16 @@ export default function DepartmentPage() {
   const [data, setData] = useState<CollegeData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
-  const [tab, setTab] = useState<Tab>("rooms");
+  // /department?tab=review (the HOD's "Review it" link) opens straight on the review step.
+  const [tab, setTab] = useState<Tab>(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "review" ? "review" : "rooms",
+  );
   const [status, setStatus] = useState<DepartmentState[] | null>(null);
   const dirty = useRef(false);
+  /** The setup as the server last gave or took it: a save from an older copy is refused, not merged. */
+  const based = useRef<CollegeData | null>(null);
+  /** Edits not saved yet, so leaving the page saves them instead of losing them. */
+  const pending = useRef<{ staff: Staff; dept: string; data: CollegeData } | null>(null);
 
   const loadStatus = useMemo(
     () => () => {
@@ -83,8 +90,11 @@ export default function DepartmentPage() {
       getDepartmentSetup(staff, dept)
         .then((s) => {
           dirty.current = false;
+          pending.current = null;
+          based.current = s.data;
           setData(s.data);
           setLoadError(null);
+          setSave((v) => (v.kind === "error" ? { kind: "idle" } : v));
         })
         .catch((e: unknown) => setLoadError(e instanceof ApiError ? e.message : "Couldn't load the setup."));
     },
@@ -95,19 +105,46 @@ export default function DepartmentPage() {
   // Autosave this department's rows a moment after the last edit.
   useEffect(() => {
     if (!staff || !data || !dirty.current) return;
+    pending.current = { staff, dept, data };
     const timer = setTimeout(() => {
+      pending.current = null;
       setSave({ kind: "saving" });
-      saveDepartmentSetup(staff, dept, data)
+      saveDepartmentSetup(staff, dept, data, based.current)
         .then((r) => {
           dirty.current = false;
+          based.current = data;
           setSave({ kind: "saved", at: r.updated_at, ignored: r.ignored, reopened: r.reopened });
           if (r.ignored.length) load(); // show the setup as the server kept it
           if (r.reopened) loadStatus();
         })
-        .catch((e: unknown) => setSave({ kind: "error", message: e instanceof ApiError ? e.message : "Couldn't save. Your changes are still here; try again." }));
-    }, 1200);
+        .catch((e: unknown) =>
+          setSave({
+            kind: "error",
+            conflict: e instanceof ApiError && e.cause === 409,
+            message: e instanceof ApiError ? e.message : "Couldn't save. Your changes are still here; try again.",
+          }),
+        );
+    }, 800);
     return () => clearTimeout(timer);
   }, [data, staff, dept, load, loadStatus]);
+
+  // Leaving the page (a menu link): save what's waiting. Closing the tab: ask first.
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (pending.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      const p = pending.current;
+      if (p) void saveDepartmentSetup(p.staff, p.dept, p.data, based.current).catch(() => undefined);
+    };
+  }, []);
+
+  // On a phone the step tabs scroll sideways: keep the open one in view.
+  useEffect(() => {
+    document.querySelector('[data-step-tab="open"]')?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [tab, data]);
 
   const specs = useMemo(
     () => ({
@@ -174,6 +211,18 @@ export default function DepartmentPage() {
           </p>
         </div>
 
+        {save.kind === "error" && save.conflict && (
+          <div role="alert" className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-blush px-4 py-3">
+            <p className="mr-auto">
+              <span className="font-semibold">Someone else just changed {deptName}&apos;s data.</span> Reload to see it, then make your change
+              again.
+            </p>
+            <button type="button" className="btn-primary" onClick={load}>
+              Reload
+            </button>
+          </div>
+        )}
+
         {save.kind === "saved" && save.ignored.length > 0 && (
           <div role="status" className="rounded-md border border-line bg-blush px-4 py-3">
             <p className="font-semibold">Some changes weren&apos;t saved, because they belong to another department or the Dean:</p>
@@ -222,6 +271,7 @@ export default function DepartmentPage() {
                     key={t.id}
                     type="button"
                     aria-pressed={tab === t.id}
+                    data-step-tab={tab === t.id ? "open" : undefined}
                     onClick={() => setTab(t.id)}
                     className={`rounded px-4 py-2 text-sm font-semibold ${tab === t.id ? "bg-sky/50" : "hover:bg-blush"}`}
                   >

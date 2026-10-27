@@ -241,6 +241,9 @@ class DepartmentSetup(BaseModel):
 
 class SaveDepartment(BaseModel):
     data: dict[str, Any]
+    base: dict[str, Any] | None = Field(
+        None, description="The setup as this page last loaded or saved it. If the department's rows changed since, nothing is saved (409)."
+    )
 
 
 class SavedDepartment(BaseModel):
@@ -277,6 +280,10 @@ def save_department_setup(department_id: str, body: SaveDepartment, who: StaffDe
     draft = load_draft(session, who.college)
     if department_id not in departments_of(draft.data):
         raise HTTPException(404, f'There is no department "{department_id}" in the setup.')
+    # Someone else (the HOD, the in-charge or the Dean) changed this department since this page loaded it:
+    # don't overwrite their work.
+    if body.base is not None and owned_rows(body.base, department_id) != owned_rows(draft.data, department_id):
+        raise HTTPException(409, "Someone else changed this department's data a moment ago. Reload to see their changes; yours weren't saved.")
     merged, ignored = merge_department(draft.data, body.data, department_id)
     reopened = False
     # The HOD approved this data (or is about to): changing it needs a fresh look.

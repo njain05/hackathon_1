@@ -78,11 +78,12 @@ const base = (s: Staff) => `/colleges/${enc(staffCode(s))}`;
 export const getDepartmentSetup = (s: Staff, dept: string) =>
   call<DepartmentSetup>(`${base(s)}/departments/${enc(dept)}/setup`, { headers: headers(s) });
 
-export const saveDepartmentSetup = (s: Staff, dept: string, data: CollegeData) =>
+/** `based`: the setup as this page last loaded or saved it; if someone else changed the department since, the server refuses (409). */
+export const saveDepartmentSetup = (s: Staff, dept: string, data: CollegeData, based?: CollegeData | null) =>
   call<SavedDepartment>(`${base(s)}/departments/${enc(dept)}/setup`, {
     method: "PUT",
     headers: headers(s),
-    body: JSON.stringify({ data }),
+    body: JSON.stringify({ data, base: based ?? null }),
   });
 
 export const getIncharge = (s: Staff, dept: string) =>
