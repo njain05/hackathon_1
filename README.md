@@ -93,13 +93,39 @@ Each person's top bar shows only their own pages, and the server checks every re
 
 ## How it's built
 
+### The whole system
+
 ```mermaid
-flowchart LR
-    U["Dean · HOD · in-charge<br/>teacher · student · club"] -->|HTTPS| FE["Next.js 16 + Tailwind<br/>(Vercel)"]
-    FE -->|JSON| BE["FastAPI<br/>(Render)"]
-    BE --> SO["solver/<br/>OR-Tools CP-SAT<br/>+ independent checker"]
-    BE --> AS["assistant/<br/>Claude Haiku, 6 tools"]
-    BE --> DB[("Postgres<br/>(Supabase)")]
+flowchart TB
+    subgraph People["People (phones and laptops)"]
+        Dean
+        HOD
+        Incharge["Timetable in-charge"]
+        Teacher
+        Student
+        Club["Club / organiser (no account)"]
+    end
+
+    subgraph Vercel["Vercel: frontend/ (Next.js 16, React, Tailwind v4)"]
+        Pages["Pages: /login /today /setup /timetable /my /teacher /hod /department /people /book /approvals /events /reports"]
+        Browser["In the browser: Excel import (SheetJS), instant checks, grid layout, exports (.xlsx, .ics)"]
+    end
+
+    subgraph Render["Render: backend/ (Python, FastAPI)"]
+        API["app/: colleges · accounts · members · departments · bookings · changes · ask"]
+        Solver["solver/ (pure): precheck → CP-SAT → independent checker → diagnose"]
+        Assistant["assistant/ (pure): 6 read-only tools + Claude tool loop"]
+    end
+
+    DB[("Postgres on Supabase (SQLite locally)")]
+    Claude["Anthropic API: Claude Haiku"]
+
+    People -->|HTTPS| Pages
+    Pages -->|"JSON over HTTPS"| API
+    API --> Solver
+    API --> Assistant
+    Assistant -->|"tool use, backend only"| Claude
+    API -->|SQLAlchemy| DB
 ```
 
 | Part | Technology | Where |
@@ -110,10 +136,42 @@ flowchart LR
 | Assistant | Claude Haiku with tool use, backend only | `backend/assistant/` (pure) |
 | Database | Postgres on Supabase (SQLite locally) | via `DATABASE_URL` |
 
-- **The solver is a pure module**: college data goes in, a timetable comes out. Hard rules are constraints; preferences are weighted penalties.
-- **Sign-in:** passwords are stored only as scrypt hashes. Each staff account seals its access key with the password, so signing in gives the browser exactly the key the server checks for that role. Students need no key: the published timetable is public.
-- **The full architecture** (every part, the data model, access rules and each main flow as a diagram): **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
-- More: [context.md](context.md) (design and decisions), [progress.md](progress.md) (build log), [CLAUDE.md](CLAUDE.md) (conventions), [docs/DEMO_TESTCASES.md](docs/DEMO_TESTCASES.md) (22 demo test cases).
+### How a timetable is made
+
+```mermaid
+flowchart LR
+    In["College data<br/>(days, periods, rooms, teachers,<br/>sections, subjects, who teaches what)"] --> Pre["precheck<br/>invalid codes, overloads,<br/>room shortages"]
+    Pre -- problems --> Explain["Plain-English reasons<br/>+ how to fix them"]
+    Pre -- ok --> CP["CP-SAT solver<br/>hard rules = constraints<br/>preferences = weighted penalties"]
+    CP -- "no solution" --> Diag["diagnose<br/>switch one rule group off at a time<br/>to find the bottleneck"]
+    Diag --> Explain
+    CP -- solution --> Chk["independent checker<br/>(shares no code with the solver)"]
+    Chk --> Out["Timetable<br/>Verified: 0 clashes + quality score"]
+```
+
+- **Hard rules** are never broken: no teacher, section or room double-booked, labs as consecutive blocks in the right lab, rooms big enough, exact weekly hours, nothing in a break, teachers' unavailable times and caps.
+- **Preferences** are weighted penalties: subject twice in a day (10), long teaching runs (5), student gaps (4), uneven teacher days (2).
+- The checker runs again **before every publish and on every daily change** (leave cover, cancelled or extra classes), so students never see a clash.
+
+### Who can do what
+
+```mermaid
+flowchart LR
+    Login["Sign in<br/>college code + username + password"] --> Check{"password matches?<br/>(5 wrong tries → 5-minute lock)"}
+    Check -- no --> Wrong["Wrong username or password"]
+    Check -- yes --> Role{role}
+    Role -- Dean --> D["Today · Setup · Timetables · Reports<br/>People & sign-ins · Changes · Approvals"]
+    Role -- HOD --> H["HOD page · Department<br/>(approve data, leave, cover, room requests)"]
+    Role -- "In-charge" --> I["Department<br/>(only their department's rows)"]
+    Role -- Teacher --> T["Teacher page<br/>(classes, leave, room bookings)"]
+    Role -- Student --> S["My timetable<br/>(their section only)"]
+```
+
+- **Passwords** are stored only as scrypt hashes. Each staff account seals its access key with the password, so signing in gives the browser exactly the key the server checks for that role. Students need no key: the published timetable is public.
+- **The server checks every request**, not just the menu: a department save keeps only that department's rows, an HOD decides only their department's leave, and a booking step can be approved only by its own approver.
+- **Secrets stay on the server** (`DATABASE_URL`, `ANTHROPIC_API_KEY` in Render's environment only).
+
+**Full details:** **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** has the data model (all 15 tables), every API group, what the browser stores, and step-by-step diagrams for set up → generate → publish, department review, leave and cover, room booking, and Ask the timetable. More: [context.md](context.md) (design and decisions), [progress.md](progress.md) (build log), [CLAUDE.md](CLAUDE.md) (conventions), [docs/DEMO_TESTCASES.md](docs/DEMO_TESTCASES.md) (22 demo test cases).
 
 ## Run it locally
 
