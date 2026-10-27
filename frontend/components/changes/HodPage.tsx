@@ -39,8 +39,10 @@ function Request({ lv, hod, data, onDone }: { lv: Leave; hod: MemberAccess; data
     try {
       await decideLeave(hod.college_code, lv.id, action, note, { member: hod });
       onDone(action === "approve"
-        ? `Approved ${teacher}’s leave. The timetable in-charge can now arrange cover.`
-        : `Rejected ${teacher}’s leave. They can see your note on their teacher page.`);
+        ? `Approved ${teacher}’s leave. Arrange cover for their classes under “Leave cover” below.`
+        : note.trim()
+          ? `Rejected ${teacher}’s leave. They can see your note on their teacher page.`
+          : `Rejected ${teacher}’s leave.`);
     } catch (e) {
       setError(errorText(e, "Couldn't save your decision. Try again."));
       setBusy(false);
@@ -99,7 +101,7 @@ function DepartmentReview({ hod }: { hod: MemberAccess }) {
         {hod.department_name}’s timetable data: {STATE_TEXT[state.state]}
         {state.note && <span className="font-normal text-ink-soft"> · “{state.note}”</span>}
       </span>
-      <Link href="/department" className={todo ? "btn-primary !py-1" : "btn-quiet !py-1"}>
+      <Link href="/department?tab=review" className={todo ? "btn-primary !py-1" : "btn-quiet !py-1"}>
         {todo ? "Review and approve" : "Review it"}
       </Link>
     </p>
@@ -112,6 +114,7 @@ export default function HodPage() {
   const hod = useMemberAccess("hod");
   const [data, setData] = useState<CollegeData | null>(null);
   const [view, setView] = useState<{ value: HodView | null; error: string | null } | null>(null);
+  const [coverKey, setCoverKey] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -146,10 +149,10 @@ export default function HodPage() {
           <h1 className="text-3xl font-bold">HOD page</h1>
           {opening.error && <p className="text-lg font-semibold text-err">{opening.error}</p>}
           <p className="text-lg text-ink-soft">
-            This page is for heads of department. Open the private HOD link the Dean sent you.
+            This page is for heads of department. Sign in with the username and password the Dean gave you.
           </p>
-          <Link href="/my" className="btn-quiet w-fit">
-            My timetable
+          <Link href="/login" className="btn-primary w-fit !px-5 !py-3 !text-base">
+            Sign in
           </Link>
         </main>
       </>
@@ -197,7 +200,7 @@ export default function HodPage() {
               ) : (
                 <ul className="flex flex-col gap-3">
                   {waiting.map((lv) => (
-                    <Request key={lv.id} lv={lv} hod={hod} data={data} onDone={(m) => { setMessage(m); load(); }} />
+                    <Request key={lv.id} lv={lv} hod={hod} data={data} onDone={(m) => { setMessage(m); load(); setCoverKey((k) => k + 1); }} />
                   ))}
                 </ul>
               )}
@@ -215,13 +218,14 @@ export default function HodPage() {
           </>
         )}
 
-        <HodCover hod={hod} data={data} />
+        {/* Re-mounted after a leave decision, so cover shows the newly approved leave straight away. */}
+        <HodCover key={coverKey} hod={hod} data={data} />
         <HodRequests hod={hod} data={data} />
 
         {/* Department setup, in-charge and room sharing (components/department/*). */}
         <section className="flex flex-col gap-2 rounded-md border border-line bg-paper p-4">
           <h2 className="text-xl font-bold">{hod.department_name} setup</h2>
-          <p className="hint">Enter or check your department&apos;s rooms, teachers, sections and subjects, and mark it ready.</p>
+          <p className="hint">Enter or check your department&apos;s rooms, teachers, sections and subjects, then approve them for the Dean.</p>
           <Link href="/department" className="btn-primary w-fit">
             Open {hod.department_name} setup
           </Link>

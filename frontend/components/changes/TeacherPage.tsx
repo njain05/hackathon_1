@@ -149,7 +149,8 @@ function MyRoomRequests({ teacher }: { teacher: MemberAccess }) {
                 <StatusBadge status={b.status} />
               </div>
               <span className="text-sm text-ink-soft">
-                {b.room_name} · {shortDate(b.date)}, periods {b.start_period}–{b.end_period}
+                {b.room_name} · {shortDate(b.date)},{" "}
+                {b.start_period === b.end_period ? `period ${b.start_period}` : `periods ${b.start_period}–${b.end_period}`}
               </span>
               <span>{whereItIs(b)}</span>
             </li>
@@ -192,6 +193,13 @@ export default function TeacherPage() {
     };
   }, [teacher, key]);
 
+  // Coming back to the page (e.g. after the HOD decided): show the latest.
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === "visible" && setTick((t) => t + 1);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
   if (teacher === undefined || opening.opening) return <PageLoading />;
 
   if (!teacher)
@@ -202,11 +210,11 @@ export default function TeacherPage() {
           <h1 className="text-3xl font-bold">Teacher page</h1>
           {opening.error && <p className="text-lg font-semibold text-err">{opening.error}</p>}
           <p className="text-lg text-ink-soft">
-            This page is for teachers. Open the private link the Dean’s office sent you to ask for leave, book a room and see
-            your changes. Students: your timetable is on My timetable.
+            This page is for teachers: ask for leave, book a room and see your changes. Sign in with the username and password
+            the Dean’s office gave you.
           </p>
-          <Link href="/my" className="btn-quiet w-fit">
-            My timetable
+          <Link href="/login" className="btn-primary w-fit !px-5 !py-3 !text-base">
+            Sign in
           </Link>
         </main>
       </>
@@ -249,7 +257,19 @@ export default function TeacherPage() {
         )}
 
         <section aria-label="Your leave requests" className="flex flex-col gap-3">
-          <h2 className="text-xl font-bold">Your leave requests</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="mr-auto text-xl font-bold">Your leave requests</h2>
+            <button
+              type="button"
+              className="btn-quiet !py-1"
+              onClick={() => {
+                setSent(null);
+                setTick((t) => t + 1);
+              }}
+            >
+              Refresh
+            </button>
+          </div>
           {current?.error && <p className="font-semibold text-err">{current.error}</p>}
           {!current ? (
             <p className="text-ink-soft">Loading…</p>
