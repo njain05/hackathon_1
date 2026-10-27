@@ -15,11 +15,13 @@ A college timetable web app that works for any college. Admins generate clash-fr
 ```
 CLAUDE.md, context.md, progress.md, README.md, .gitignore, render.yaml (Render Blueprint)
 docs/screenshots/ # README pictures (refresh: UPDATE_SCREENSHOTS=1 npm run e2e)
+docs/New_College_Data.xlsx, docs/demo-college.json # the demo college (import it in Setup; seed_demo.py uses the JSON)
 frontend/
   app/            # routes: / (home), /setup (wizard), /timetable (all views), /my (student/teacher), /c/[code] (share link → /my),
                   #   /book, /track/[token], /approvals, /events (hall booking), /changes (leave & daily changes),
                   #   /teacher, /hod (private links), /people (admin: HOD and teacher links),
-                  #   /department (HOD / timetable in-charge: their department's setup), /reports (staff)
+                  #   /department (HOD / timetable in-charge: their department's setup), /reports (staff),
+                  #   /login (everyone signs in), /account (change password), /today (the Dean's to-dos)
   components/setup/ # wizard, steps, DataTable (edit/paste/import), DayPreview
   components/timetable/ # TimetableGrid (grid + phone list + key), QualityPanel, TimetablePage, MyTimetable
   components/share/ # CloudSave (save online, admin link, autosave), PublishBar, OpenCollege (code entry)
@@ -52,6 +54,9 @@ frontend/
   lib/server.ts   # ensureAwake(): wakes a sleeping free server, "Waking up the server" banner
   lib/periods.ts  # clock times per period/break, periodsOn() for short days
   lib/exports.ts  # Excel export of every timetable, .ics "Add to my calendar"
+  lib/accounts.ts # sign in / out (stores the role's existing access), the Dean's account calls
+  lib/demo.ts     # the public demo college's sign-ins, shown in grey on /login
+  lib/staffTimetable.ts # the Dean's timetable: generated here, else the published one
   lib/reports.ts  # /reports numbers: teacher workload vs department average, room usage, section load
   e2e/            # Playwright end-to-end tests (npm run e2e); playwright.config.ts
   .env.local.example
@@ -64,7 +69,9 @@ backend/
   app/changes.py  # leave (+ HOD approval), substitutes, cancel/extra classes; a day = published weekday + changes, clash-checked
   app/members.py  # people with a role and a private link (X-Member-Key): HOD, teacher, in-charge
   app/ask.py      # POST /colleges/{ref}/ask: builds the helper's context, rate limit, friendly errors
-  app/departments.py # HOD/in-charge department-scoped setup save (server merge), in-charge links, ready flags, room-share requests
+  app/departments.py # HOD/in-charge department-scoped setup save (server merge, stale-copy 409), review: submit → HOD approve/return, room-share requests
+  app/accounts.py # username + password sign-in for every role; a staff account seals its existing access key with the password
+  seed_demo.py    # makes the public demo college on a server (python seed_demo.py <API URL>)
   assistant/      # Claude helper, pure: tools.py (6 tools over the real day), chat.py (tool loop, Haiku)
   solver/         # pure CP-SAT solver: no FastAPI imports
     models.py     #   Pydantic input/output models

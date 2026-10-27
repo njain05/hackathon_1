@@ -1,0 +1,1275 @@
+{
+ "name": "Guru Nanak Institute of Technology, Ludhiana",
+ "settings": {
+  "days": [
+   "Monday",
+   "Tuesday",
+   "Wednesday",
+   "Thursday",
+   "Friday",
+   "Saturday"
+  ],
+  "periods_per_day": 8,
+  "day_start": "09:00",
+  "period_minutes": 50,
+  "breaks": [
+   {
+    "name": "Lunch",
+    "after_period": 4,
+    "minutes": 40,
+    "labs_continue": false
+   }
+  ],
+  "periods_by_day": {
+   "Saturday": 4
+  }
+ },
+ "room_types": [
+  {
+   "id": "classroom",
+   "name": "Classroom",
+   "use": "lecture"
+  },
+  {
+   "id": "computer_lab",
+   "name": "Computer lab",
+   "use": "lab"
+  },
+  {
+   "id": "lab",
+   "name": "Engineering lab",
+   "use": "lab"
+  },
+  {
+   "id": "seminar_hall",
+   "name": "Seminar hall",
+   "use": "event"
+  },
+  {
+   "id": "auditorium",
+   "name": "Auditorium",
+   "use": "event"
+  }
+ ],
+ "departments": [
+  {
+   "id": "CSE",
+   "name": "Computer Science & Engineering"
+  },
+  {
+   "id": "ME",
+   "name": "Mechanical Engineering"
+  },
+  {
+   "id": "AS",
+   "name": "Applied Sciences"
+  }
+ ],
+ "rooms": [
+  {
+   "id": "LT-101",
+   "name": "Lecture Theatre 1 (Main Block)",
+   "type": "classroom",
+   "capacity": 72,
+   "department_id": null
+  },
+  {
+   "id": "LT-102",
+   "name": "Lecture Theatre 2 (Main Block)",
+   "type": "classroom",
+   "capacity": 70,
+   "department_id": null
+  },
+  {
+   "id": "LT-103",
+   "name": "Lecture Theatre 3 (Main Block)",
+   "type": "classroom",
+   "capacity": 70,
+   "department_id": null
+  },
+  {
+   "id": "C-201",
+   "name": "CSE Block Room 201",
+   "type": "classroom",
+   "capacity": 66,
+   "department_id": "CSE"
+  },
+  {
+   "id": "C-202",
+   "name": "CSE Block Room 202",
+   "type": "classroom",
+   "capacity": 66,
+   "department_id": "CSE"
+  },
+  {
+   "id": "C-203",
+   "name": "CSE Block Room 203",
+   "type": "classroom",
+   "capacity": 66,
+   "department_id": "CSE"
+  },
+  {
+   "id": "M-101",
+   "name": "ME Block Room 101",
+   "type": "classroom",
+   "capacity": 64,
+   "department_id": "ME"
+  },
+  {
+   "id": "M-102",
+   "name": "ME Block Room 102",
+   "type": "classroom",
+   "capacity": 64,
+   "department_id": "ME"
+  },
+  {
+   "id": "CL-1",
+   "name": "Central Computer Lab 1",
+   "type": "computer_lab",
+   "capacity": 70,
+   "department_id": null
+  },
+  {
+   "id": "CL-2",
+   "name": "Central Computer Lab 2",
+   "type": "computer_lab",
+   "capacity": 66,
+   "department_id": null
+  },
+  {
+   "id": "CL-3",
+   "name": "CSE Programming Lab (small)",
+   "type": "computer_lab",
+   "capacity": 40,
+   "department_id": "CSE"
+  },
+  {
+   "id": "PHY-LAB",
+   "name": "Physics Lab",
+   "type": "lab",
+   "capacity": 66,
+   "department_id": "AS"
+  },
+  {
+   "id": "WS-1",
+   "name": "Central Mechanical Workshop",
+   "type": "lab",
+   "capacity": 70,
+   "department_id": null
+  },
+  {
+   "id": "ME-TL",
+   "name": "Thermal & Fluids Lab",
+   "type": "lab",
+   "capacity": 60,
+   "department_id": "ME"
+  },
+  {
+   "id": "SH-1",
+   "name": "Seminar Hall (CSE Block)",
+   "type": "seminar_hall",
+   "capacity": 150,
+   "department_id": null
+  },
+  {
+   "id": "AUD",
+   "name": "Guru Nanak Auditorium",
+   "type": "auditorium",
+   "capacity": 600,
+   "department_id": null
+  }
+ ],
+ "teachers": [
+  {
+   "id": "HSS",
+   "name": "Dr. Harjinder Singh Sidhu",
+   "department_id": "AS",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "ISG",
+   "name": "Dr. Inderjit Singh Gill",
+   "department_id": "AS",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "GKG",
+   "name": "Dr. Gurpreet Kaur Gill",
+   "department_id": "AS",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": [
+    {
+     "day": "Monday",
+     "period": 1
+    },
+    {
+     "day": "Monday",
+     "period": 2
+    }
+   ]
+  },
+  {
+   "id": "RKS",
+   "name": "Prof. Rajinder Kumar Sharma",
+   "department_id": "AS",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "SMK",
+   "name": "Dr. Simranjit Kaur",
+   "department_id": "AS",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "ASD",
+   "name": "Dr. Amandeep Singh Dhillon",
+   "department_id": "AS",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "NKB",
+   "name": "Prof. Navjot Kaur Brar",
+   "department_id": "AS",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": [
+    {
+     "day": "Friday",
+     "period": 7
+    },
+    {
+     "day": "Friday",
+     "period": 8
+    }
+   ]
+  },
+  {
+   "id": "KSM",
+   "name": "Dr. Kulwinder Singh Mann (HOD)",
+   "department_id": "CSE",
+   "max_periods_per_day": 4,
+   "max_periods_per_week": 14,
+   "unavailable": [
+    {
+     "day": "Saturday",
+     "period": 1
+    },
+    {
+     "day": "Saturday",
+     "period": 2
+    },
+    {
+     "day": "Saturday",
+     "period": 3
+    },
+    {
+     "day": "Saturday",
+     "period": 4
+    },
+    {
+     "day": "Saturday",
+     "period": 5
+    },
+    {
+     "day": "Saturday",
+     "period": 6
+    },
+    {
+     "day": "Saturday",
+     "period": 7
+    },
+    {
+     "day": "Saturday",
+     "period": 8
+    }
+   ]
+  },
+  {
+   "id": "PKB",
+   "name": "Dr. Parminder Kaur Bajwa",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "MSG",
+   "name": "Prof. Manpreet Singh Grewal",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "JKS",
+   "name": "Er. Jaspreet Kaur Sandhu",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "SKB",
+   "name": "Dr. Sandeep Kumar Bansal",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "RA",
+   "name": "Prof. Ritu Arora",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": [
+    {
+     "day": "Wednesday",
+     "period": 5
+    },
+    {
+     "day": "Wednesday",
+     "period": 6
+    },
+    {
+     "day": "Wednesday",
+     "period": 7
+    },
+    {
+     "day": "Wednesday",
+     "period": 8
+    }
+   ]
+  },
+  {
+   "id": "GSR",
+   "name": "Er. Gagandeep Singh Randhawa",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "HKA",
+   "name": "Dr. Harpreet Kaur Aulakh",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "VJS",
+   "name": "Prof. Vikramjeet Singh",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "AKP",
+   "name": "Prof. Arshdeep Kaur Pannu",
+   "department_id": "CSE",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "BSC",
+   "name": "Dr. Balwinder Singh Cheema (HOD)",
+   "department_id": "ME",
+   "max_periods_per_day": 4,
+   "max_periods_per_week": 14,
+   "unavailable": []
+  },
+  {
+   "id": "TPS",
+   "name": "Prof. Tejinder Pal Singh",
+   "department_id": "ME",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "RKT",
+   "name": "Dr. Rupinder Kaur Toor",
+   "department_id": "ME",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "LSV",
+   "name": "Er. Lakhwinder Singh Virk",
+   "department_id": "ME",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "KSB",
+   "name": "Prof. Kamaljeet Singh Bhullar",
+   "department_id": "ME",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  },
+  {
+   "id": "MKS",
+   "name": "Er. Mandeep Kaur Sekhon",
+   "department_id": "ME",
+   "max_periods_per_day": 5,
+   "max_periods_per_week": 18,
+   "unavailable": []
+  }
+ ],
+ "sections": [
+  {
+   "id": "FY-A",
+   "name": "B.Tech 1st Sem Group A",
+   "department_id": "AS",
+   "strength": 66,
+   "batches": []
+  },
+  {
+   "id": "FY-B",
+   "name": "B.Tech 1st Sem Group B",
+   "department_id": "AS",
+   "strength": 64,
+   "batches": []
+  },
+  {
+   "id": "CSE-3A",
+   "name": "B.Tech CSE 3rd Sem A",
+   "department_id": "CSE",
+   "strength": 60,
+   "batches": [
+    {
+     "id": "A1",
+     "strength": 30
+    },
+    {
+     "id": "A2",
+     "strength": 30
+    }
+   ]
+  },
+  {
+   "id": "CSE-3B",
+   "name": "B.Tech CSE 3rd Sem B",
+   "department_id": "CSE",
+   "strength": 60,
+   "batches": []
+  },
+  {
+   "id": "CSE-5A",
+   "name": "B.Tech CSE 5th Sem",
+   "department_id": "CSE",
+   "strength": 62,
+   "batches": []
+  },
+  {
+   "id": "CSE-7A",
+   "name": "B.Tech CSE 7th Sem",
+   "department_id": "CSE",
+   "strength": 55,
+   "batches": []
+  },
+  {
+   "id": "ME-3A",
+   "name": "B.Tech ME 3rd Sem",
+   "department_id": "ME",
+   "strength": 58,
+   "batches": []
+  },
+  {
+   "id": "ME-5A",
+   "name": "B.Tech ME 5th Sem",
+   "department_id": "ME",
+   "strength": 52,
+   "batches": []
+  }
+ ],
+ "subjects": [
+  {
+   "id": "BSC101",
+   "code": "BSC101",
+   "name": "Engineering Physics",
+   "department_id": "AS",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "BSC102",
+   "code": "BSC102",
+   "name": "Engineering Mathematics-I",
+   "department_id": "AS",
+   "lecture_hours": 4,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "BSC103",
+   "code": "BSC103",
+   "name": "Engineering Chemistry",
+   "department_id": "AS",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "BSC104",
+   "code": "BSC104",
+   "name": "Environmental Science",
+   "department_id": "AS",
+   "lecture_hours": 2,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "HSM101",
+   "code": "HSM101",
+   "name": "Communication Skills in English",
+   "department_id": "AS",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "ESC101",
+   "code": "ESC101",
+   "name": "Programming for Problem Solving",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "ESC102",
+   "code": "ESC102",
+   "name": "Manufacturing Practice (Workshop)",
+   "department_id": "ME",
+   "lecture_hours": 1,
+   "lab_hours": 4,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "CS201",
+   "code": "CS201",
+   "name": "Data Structures & Algorithms",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "CS202",
+   "code": "CS202",
+   "name": "Object Oriented Programming (C++)",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "CS203",
+   "code": "CS203",
+   "name": "Digital Electronics",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS204",
+   "code": "CS204",
+   "name": "Discrete Mathematics",
+   "department_id": "AS",
+   "lecture_hours": 4,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS205",
+   "code": "CS205",
+   "name": "Computer Architecture & Organisation",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "HSM202",
+   "code": "HSM202",
+   "name": "Universal Human Values",
+   "department_id": "AS",
+   "lecture_hours": 2,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS301",
+   "code": "CS301",
+   "name": "Database Management Systems",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "CS302",
+   "code": "CS302",
+   "name": "Operating Systems",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "CS303",
+   "code": "CS303",
+   "name": "Design & Analysis of Algorithms",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS304",
+   "code": "CS304",
+   "name": "Software Engineering",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS305",
+   "code": "CS305",
+   "name": "Formal Languages & Automata",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS306",
+   "code": "CS306",
+   "name": "Web Technologies",
+   "department_id": "CSE",
+   "lecture_hours": 2,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "CS401",
+   "code": "CS401",
+   "name": "Machine Learning",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "CS402",
+   "code": "CS402",
+   "name": "Cloud Computing",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS403",
+   "code": "CS403",
+   "name": "Compiler Design",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "CS404",
+   "code": "CS404",
+   "name": "Project-I",
+   "department_id": "CSE",
+   "lecture_hours": 0,
+   "lab_hours": 4,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "CS405",
+   "code": "CS405",
+   "name": "Cyber Security",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "HSM401",
+   "code": "HSM401",
+   "name": "Entrepreneurship & Startups",
+   "department_id": "AS",
+   "lecture_hours": 2,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "ME201",
+   "code": "ME201",
+   "name": "Engineering Mechanics",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "ME202",
+   "code": "ME202",
+   "name": "Thermodynamics",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "ME203",
+   "code": "ME203",
+   "name": "Strength of Materials",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "ME204",
+   "code": "ME204",
+   "name": "Manufacturing Processes",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "BSC202",
+   "code": "BSC202",
+   "name": "Mathematics-III (Transforms & PDE)",
+   "department_id": "AS",
+   "lecture_hours": 4,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "ME301",
+   "code": "ME301",
+   "name": "Fluid Mechanics & Machinery",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "ME302",
+   "code": "ME302",
+   "name": "Theory of Machines",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "ME303",
+   "code": "ME303",
+   "name": "Heat Transfer",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "lab"
+  },
+  {
+   "id": "ME304",
+   "code": "ME304",
+   "name": "Design of Machine Elements",
+   "department_id": "ME",
+   "lecture_hours": 4,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "ME305",
+   "code": "ME305",
+   "name": "CAD/CAM",
+   "department_id": "ME",
+   "lecture_hours": 2,
+   "lab_hours": 2,
+   "lab_block_length": 2,
+   "lab_room_type": "computer_lab"
+  },
+  {
+   "id": "HSM301",
+   "code": "HSM301",
+   "name": "Industrial Management",
+   "department_id": "AS",
+   "lecture_hours": 2,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "OE-CS1",
+   "code": "OE-CS1",
+   "name": "Introduction to Artificial Intelligence",
+   "department_id": "CSE",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "OE-ME1",
+   "code": "OE-ME1",
+   "name": "Renewable Energy Systems",
+   "department_id": "ME",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  },
+  {
+   "id": "OE-AS1",
+   "code": "OE-AS1",
+   "name": "Disaster Management",
+   "department_id": "AS",
+   "lecture_hours": 3,
+   "lab_hours": 0,
+   "lab_block_length": 2,
+   "lab_room_type": null
+  }
+ ],
+ "assignments": [
+  {
+   "section_id": "FY-A",
+   "subject_id": "BSC101",
+   "teacher_id": "HSS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-A",
+   "subject_id": "BSC102",
+   "teacher_id": "GKG",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-A",
+   "subject_id": "BSC103",
+   "teacher_id": "ASD",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-A",
+   "subject_id": "BSC104",
+   "teacher_id": "NKB",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-A",
+   "subject_id": "HSM101",
+   "teacher_id": "SMK",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-A",
+   "subject_id": "ESC101",
+   "teacher_id": "JKS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-A",
+   "subject_id": "ESC102",
+   "teacher_id": "KSB",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-B",
+   "subject_id": "BSC101",
+   "teacher_id": "ISG",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-B",
+   "subject_id": "BSC102",
+   "teacher_id": "GKG",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-B",
+   "subject_id": "BSC103",
+   "teacher_id": "ASD",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-B",
+   "subject_id": "BSC104",
+   "teacher_id": "NKB",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-B",
+   "subject_id": "HSM101",
+   "teacher_id": "SMK",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-B",
+   "subject_id": "ESC101",
+   "teacher_id": "JKS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "FY-B",
+   "subject_id": "ESC102",
+   "teacher_id": "KSB",
+   "lab_teacher_id": "MKS",
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3A",
+   "subject_id": "CS201",
+   "teacher_id": "PKB",
+   "lab_teacher_id": null,
+   "lab_by_batch": true
+  },
+  {
+   "section_id": "CSE-3A",
+   "subject_id": "CS202",
+   "teacher_id": "MSG",
+   "lab_teacher_id": null,
+   "lab_by_batch": true
+  },
+  {
+   "section_id": "CSE-3A",
+   "subject_id": "CS203",
+   "teacher_id": "VJS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3A",
+   "subject_id": "CS204",
+   "teacher_id": "GKG",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3A",
+   "subject_id": "CS205",
+   "teacher_id": "RA",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3A",
+   "subject_id": "HSM202",
+   "teacher_id": "SMK",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3B",
+   "subject_id": "CS201",
+   "teacher_id": "PKB",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3B",
+   "subject_id": "CS202",
+   "teacher_id": "MSG",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3B",
+   "subject_id": "CS203",
+   "teacher_id": "VJS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3B",
+   "subject_id": "CS204",
+   "teacher_id": "RKS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3B",
+   "subject_id": "CS205",
+   "teacher_id": "AKP",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-3B",
+   "subject_id": "HSM202",
+   "teacher_id": "SMK",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-5A",
+   "subject_id": "CS301",
+   "teacher_id": "SKB",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-5A",
+   "subject_id": "CS302",
+   "teacher_id": "RA",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-5A",
+   "subject_id": "CS303",
+   "teacher_id": "KSM",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-5A",
+   "subject_id": "CS304",
+   "teacher_id": "HKA",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-5A",
+   "subject_id": "CS305",
+   "teacher_id": "HKA",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-5A",
+   "subject_id": "CS306",
+   "teacher_id": "GSR",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-7A",
+   "subject_id": "CS401",
+   "teacher_id": "KSM",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-7A",
+   "subject_id": "CS402",
+   "teacher_id": "AKP",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-7A",
+   "subject_id": "CS403",
+   "teacher_id": "HKA",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-7A",
+   "subject_id": "CS404",
+   "teacher_id": "GSR",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-7A",
+   "subject_id": "CS405",
+   "teacher_id": "GSR",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "CSE-7A",
+   "subject_id": "HSM401",
+   "teacher_id": "NKB",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-3A",
+   "subject_id": "ME201",
+   "teacher_id": "BSC",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-3A",
+   "subject_id": "ME202",
+   "teacher_id": "TPS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-3A",
+   "subject_id": "ME203",
+   "teacher_id": "RKT",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-3A",
+   "subject_id": "ME204",
+   "teacher_id": "LSV",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-3A",
+   "subject_id": "BSC202",
+   "teacher_id": "RKS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-3A",
+   "subject_id": "HSM202",
+   "teacher_id": "SMK",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-5A",
+   "subject_id": "ME301",
+   "teacher_id": "LSV",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-5A",
+   "subject_id": "ME302",
+   "teacher_id": "RKT",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-5A",
+   "subject_id": "ME303",
+   "teacher_id": "TPS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-5A",
+   "subject_id": "ME304",
+   "teacher_id": "BSC",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-5A",
+   "subject_id": "ME305",
+   "teacher_id": "MKS",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  },
+  {
+   "section_id": "ME-5A",
+   "subject_id": "HSM301",
+   "teacher_id": "NKB",
+   "lab_teacher_id": null,
+   "lab_by_batch": false
+  }
+ ],
+ "elective_groups": [
+  {
+   "id": "OE-1",
+   "name": "Open Elective-I",
+   "section_ids": [
+    "CSE-7A",
+    "ME-5A"
+   ],
+   "periods_per_week": 3,
+   "options": [
+    {
+     "subject_id": "OE-CS1",
+     "teacher_id": "KSM",
+     "students": 50
+    },
+    {
+     "subject_id": "OE-ME1",
+     "teacher_id": "TPS",
+     "students": 37
+    },
+    {
+     "subject_id": "OE-AS1",
+     "teacher_id": "VJS",
+     "students": 20
+    }
+   ]
+  }
+ ]
+}

@@ -1,23 +1,49 @@
 # College Timetable
 
-**One place for the whole college.** Admins generate a clash-free timetable in minutes, teachers and students see their own week on their phones, departments run their own part of the setup, and clubs book seminar halls with digital approval instead of paper letters.
+**One place for the whole college.** The Dean's office generates a clash-free timetable in minutes. Everyone signs in with their own username and password and sees only their own pages. Departments prepare and approve their own data, and clubs book rooms with digital approval instead of paper letters.
 
-**Live demo:** <https://college-timetable-teal.vercel.app>. Click **Set up your college → Load sample college → Check & generate → Generate timetable**. The first visit may take up to a minute while the free server wakes up.
+**Live demo:** <https://college-timetable-teal.vercel.app>. The first visit may take up to a minute while the free server wakes up.
 
 Built for the Punjab Jobs AI Bootcamp hackathon (J-PAL South Asia). It works for any college: nothing about days, periods, breaks, rooms or departments is hard-coded.
 
 ![A section's week: periods with clock times, tea and lunch breaks, labs as one block, a colour per subject](docs/screenshots/desktop-grid.png)
 
+## Try it: sign in as each person
+
+Open **Sign in** on the live site. The demo college's sign-in is already shown in grey in the boxes: choose a role, then press **Sign in**.
+
+| Sign in as | Username | Password | What to try |
+|---|---|---|---|
+| **Dean** (super admin) | `dean` | `demo1234` | Today's to-do list, all timetables, Setup (change data, generate again, publish), People & sign-ins, Reports, hall approvals |
+| **HOD** of CSE | `hod` | `demo1234` | Approve CSE's timetable data (or send it back with a note), approve leave and arrange cover, room-sharing requests, make the in-charge's sign-in |
+| **Timetable in-charge** of CSE | `incharge` | `demo1234` | Edit only CSE's rooms, teachers, sections and classes, then send them to the HOD |
+| **Teacher** | `teacher` | `demo1234` | Today's classes, their week, ask for leave, book a room |
+| **Student** (CSE-3A) | `student` | `demo1234` | "Now / Next", their section's week, add it to their phone's calendar |
+
+College code: **`DEMOCODE`** (the demo college, *Guru Nanak Institute of Technology, Ludhiana*, built from [docs/New_College_Data.xlsx](docs/New_College_Data.xlsx)).
+
+These demo sign-ins are public and open only the demo college. If someone changes it, `python backend/seed_demo.py https://college-timetable-api.onrender.com` makes a fresh one, and its code goes in `frontend/lib/demo.ts`.
+
+### Test it from scratch in 10 minutes
+
+1. **Sign out** (your name at the top right → Sign out). On the home page choose **New college? Set it up**.
+2. Pick **Engineering**, then **Excel → Import workbook** and choose [docs/New_College_Data.xlsx](docs/New_College_Data.xlsx). Look through the steps; change anything you like.
+3. **Check & generate → Generate timetable** (about 20 s on the free server). You get "Verified: 0 clashes".
+4. **Save online & share**, then choose your Dean username and password. On **Timetables**, press **Publish timetable**.
+5. On **People & sign-ins**, make an HOD, a teacher and a student (or paste students as "roll number, name, section"). Write down the passwords: they're shown once.
+6. Sign out and sign in as each of them: everyone lands on their own page and sees only their own links.
+7. To start again: **Setup → Start a new college**. To take a timetable down: **Timetables → Unpublish** or **Delete this timetable**.
+
 ## Who it's for
 
 | Person | What they get |
 |---|---|
-| **Timetable admin** (super admin) | A 6-step setup (or one Excel workbook), a timetable with **0 clashes, checked twice**, plain-English reasons when something can't fit, and one click to publish |
-| **HOD** | Approves leave and room-sharing requests for their department, and appoints its timetable in-charge |
-| **Timetable in-charge** | Edits only their department's rooms, teachers, sections and subjects, and marks it ready |
-| **Teachers** | Their own week, today's classes, and leave requests |
-| **Students** | Their section's week and a "Now / Next" card, from a share link or a 6-letter code. No login, nothing to change. |
-| **Clubs and departments** | Book a seminar hall or auditorium in a free slot, follow the approval, and see the events calendar |
+| **Dean** (super admin) | A 6-step setup (or one Excel workbook), a timetable with **0 clashes, checked twice**, plain-English reasons when something can't fit, one click to publish, and everyone's sign-ins |
+| **HOD** | Approves the department's data before the Dean generates, approves leave and arranges cover, decides room-sharing requests, and chooses the timetable in-charge |
+| **Timetable in-charge** | Edits only their department's rooms, teachers, sections and subjects, and sends them to the HOD |
+| **Teachers** | Their own week, today's classes, leave requests and room bookings |
+| **Students** | Their section's week and a "Now / Next" card, after signing in. Nothing to change. |
+| **Clubs and departments** | Book a seminar hall or room in a free slot, follow the approval, and see the events calendar |
 
 ## What it does
 
@@ -33,7 +59,9 @@ Built for the Punjab Jobs AI Bootcamp hackathon (J-PAL South Asia). It works for
 - **Open electives.** Students of several sections choose parallel subjects that run at the same time, each with its own teacher and room.
 - **Room sharing between departments**, approved by the room's HOD, which the solver then uses.
 - **Fair workload.** An optional "max periods a week" per teacher, and a warning when someone teaches far more than their department's average.
-- **Department roles.** A super admin, plus HOD, timetable in-charge and teacher links. Each department edits only its own data, and the server enforces it.
+- **Sign in for everyone.** The Dean, HODs, timetable in-charges, teachers and students each have a username and password, and see only their own pages. The Dean makes everyone's sign-ins: one at a time, all teachers at once, or students pasted from Excel. The Dean can also reset or remove them. Passwords are stored only as scrypt hashes, and 5 wrong tries lock a sign-in for 5 minutes.
+- **Departments approve their own data.** The in-charge sends the department's data to the HOD, who approves it or sends it back with a note. The Dean generates once every department is approved, or chooses "Generate anyway". Each department can edit only its own rows, and the server enforces it.
+- **Change anything, any time.** Edit or re-import the data, generate again and republish as often as you like. You can also unpublish or delete a timetable, or start a new college.
 - **Timetable views** by section, teacher and room, on a printable A4 page, and as a day-by-day list on phones. A student's **Today** card shows what's on now and next.
 - **Hall booking with digital approval.** Only free slots are offered. The request moves through an approval chain (e.g. HOD → Dean), the organiser follows it with a tracking link, and approved events appear on a calendar.
 - **Daily changes.** Teacher leave with HOD approval, substitute suggestions, and cancelled or moved classes shown on students' Today card.
@@ -43,11 +71,11 @@ Built for the Punjab Jobs AI Bootcamp hackathon (J-PAL South Asia). It works for
 
 ## How an admin uses it, in 5 steps
 
-1. **Start:** open the site → **Set up your college** → pick a template (or **Load sample college** to try it).
-2. **Enter the college:** days, periods and breaks, then rooms, teachers, sections, subjects and *who teaches what*. Type, paste from Excel, or import the workbook. You can also give each HOD a link so departments enter their own part.
+1. **Start:** open the site → **New college? Set it up** → pick a template (or **Load sample college** to try it).
+2. **Enter the college:** days, periods and breaks, then rooms, teachers, sections, subjects and *who teaches what*. Type, paste from Excel, or import the workbook. HODs and in-charges can also enter and approve their own department's part.
 3. **Check & generate:** fix anything the checks point out (each problem has a "Fix in…" button), then press **Generate timetable**. You get "Verified: 0 clashes".
 4. **Review:** look at every section, teacher and room, read the quality score, and print if you like.
-5. **Save online & publish:** keep your private admin link safe, press **Publish timetable**, and share the 6-letter code or link with students and teachers.
+5. **Save online & publish:** choose your username and password, press **Publish timetable**, and give everyone their sign-in on **People & sign-ins**.
 
 ## Screenshots
 
@@ -171,5 +199,6 @@ If you forget the variable, the Vercel build stops with "NEXT_PUBLIC_API_URL is 
 
 - **Combined lectures** (two sections taught together in one room) are designed in the data model but not built yet ([context.md](context.md), "College variations").
 - **Free hosting is slow to wake and slow to solve.** The free Render server sleeps after 15 minutes (the site shows "Waking up the server") and has about a tenth of a CPU, so generating takes about 20 seconds there and may not reach the best possible score. It is still always clash-free. It takes about 5 seconds on a laptop.
-- **Links instead of accounts.** Anyone holding a private link can use it, so share them privately; making a new link revokes the old one.
+- **No email password reset.** The Dean resets a forgotten password on People & sign-ins; a forgotten Dean password needs the backup admin link.
+- **The demo sign-ins are public**, so anyone can change the demo college. Re-run `backend/seed_demo.py` for a fresh one.
 - **Next:** live calendar subscription links (today's "Add to my calendar" is a one-time file), an installable offline app for viewing, pasting a messy load sheet for Claude to tidy, and a one-command local college server (Docker).
