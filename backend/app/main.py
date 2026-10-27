@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
+from app.accounts import router as accounts_router
 from app.ask import router as ask_router
 from app.bookings import router as bookings_router
 from app.changes import router as changes_router
@@ -29,6 +30,7 @@ app.include_router(ask_router)
 app.include_router(changes_router)
 app.include_router(members_router)
 app.include_router(departments_router)
+app.include_router(accounts_router)
 app.add_exception_handler(SQLAlchemyError, database_error)
 app.add_exception_handler(db.DatabaseUnavailable, database_error)
 
