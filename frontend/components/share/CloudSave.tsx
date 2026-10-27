@@ -10,6 +10,7 @@ import {
   getAdminCollege,
   readAdminAccess,
   readSyncedAt,
+  readSyncedStamp,
   saveDraft,
   setAdminAccess,
   shareLink,
@@ -184,13 +185,20 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
     if (json === lastSaved.current) return;
     const timer = setTimeout(() => {
       setSave({ kind: "saving" });
-      saveDraft(access, data)
+      saveDraft(access, data, readSyncedStamp(access.code))
         .then((r) => {
           lastSaved.current = json;
           writeSyncedAt(access.code, r.updated_at);
           setSave({ kind: "saved", at: r.updated_at });
         })
-        .catch((e: unknown) => setSave({ kind: "error", message: errorText(e, "Couldn't save online."), afterSave: true }));
+        .catch((e: unknown) => {
+          // Someone saved online meanwhile (a department, another device): compare and ask, never overwrite.
+          if (e instanceof ApiError && e.cause === 409) {
+            setRetry((r) => r + 1);
+            return;
+          }
+          setSave({ kind: "error", message: errorText(e, "Couldn't save online."), afterSave: true });
+        });
     }, 1200);
     return () => clearTimeout(timer);
   }, [access, data, ready]);
@@ -271,8 +279,8 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
         {save.kind === "conflict" && (
           <div role="alert" className="flex flex-col gap-2 rounded-md border border-line bg-blush p-3">
             <p className="font-semibold">
-              The copy saved online is different from this browser’s
-              {save.at ? ` (online copy saved ${when(save.at)})` : ""}. Which one do you want to keep?
+              Someone saved changes online since this browser last saved (a department, or you on another device)
+              {save.at ? `, at ${when(save.at)}` : ""}. Nothing was overwritten. Which copy do you want to keep?
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -292,10 +300,12 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
                 className="btn-quiet"
                 onClick={() => {
                   lastSaved.current = stable(save.online);
+                  // Saving over the online copy is now a choice made with it in view.
+                  if (save.at) writeSyncedAt(access.code, save.at);
                   setSave({ kind: "saving" }); // autosave now uploads this browser's copy
                 }}
               >
-                Keep this browser’s copy
+                Keep this browser’s copy (replaces theirs)
               </button>
             </div>
           </div>

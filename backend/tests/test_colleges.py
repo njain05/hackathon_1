@@ -166,3 +166,23 @@ def test_unparseable_database_url_gives_a_clear_503(monkeypatch: pytest.MonkeyPa
         assert client.get("/health/db").json()["database"] == "error"
     finally:
         db.reset()
+
+
+def test_a_save_never_overwrites_newer_work_unseen() -> None:
+    """The Dean has the setup open on a laptop; a department (or a phone) saves meanwhile."""
+    c = create()
+    admin = {"X-Admin-Key": c["admin_key"]}
+    first = client.put(f"/colleges/{c['code']}/data", json={"name": "v1"}, headers=admin).json()["updated_at"]
+
+    # The phone saves on top of v1: fine, it is based on the latest copy.
+    phone = client.put(f"/colleges/{c['code']}/data", json={"name": "v2 from the phone"}, headers={**admin, "X-Based-On": first})
+    assert phone.status_code == 200
+    # The laptop still thinks v1 is the latest: refused, and v2 is kept.
+    laptop = client.put(f"/colleges/{c['code']}/data", json={"name": "v1 edited on the laptop"}, headers={**admin, "X-Based-On": first})
+    assert laptop.status_code == 409 and "changed online" in laptop.json()["detail"]
+    assert client.get(f"/colleges/{c['code']}/admin", headers=admin).json()["data"] == {"name": "v2 from the phone"}
+    # After reloading (based on the phone's save), the laptop can save again.
+    ok = client.put(f"/colleges/{c['code']}/data", json={"name": "v3"}, headers={**admin, "X-Based-On": phone.json()["updated_at"]})
+    assert ok.status_code == 200
+    # Older clients that send no X-Based-On keep working as before.
+    assert client.put(f"/colleges/{c['code']}/data", json={"name": "v4"}, headers=admin).status_code == 200

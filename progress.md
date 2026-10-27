@@ -3,6 +3,10 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: The Dean's autosave never overwrites a department's newer save** (bug P1 found)
+  - `PUT /colleges/{ref}/data` takes `X-Based-On` (the updated_at the copy started from). If the draft changed since (a department's scoped save, a room-share approval, or the Dean on another device), it returns 409 and keeps the newer copy. Clients without the header work as before.
+  - CloudSave sends it on every autosave. On a 409 it re-checks and asks: "Someone saved changes online since this browser last saved (a department, or you on another device)… Nothing was overwritten. Which copy do you want to keep?" The options are "Use the online copy" or "Keep this browser's copy (replaces theirs)".
+  - Tested: a new backend test (stale save refused, newer copy kept, saving works again after reloading, old clients unaffected). In the browser: the setup was open, someone else saved via the API, then a name edit was refused with the prompt shown, and the other save stayed online.
 - **2026-10-27: HOD approves department data, Dean generates** (P1 session, `330a997`, pushed and live)
   - The in-charge prepares the department's data and presses **Send to the HOD for approval** (/department, tab "Check & send to HOD"). The HOD **approves** it or **sends it back with a note** saying what to fix (tab "Check & approve"). The HOD can also approve a draft directly when there is no in-charge.
   - Changing an approved (or sent) department's rows puts it back to draft, and the page says so. Saves with no real change, or changes to other departments' rows (which are ignored), don't. The Dean's own changes don't undo an approval.

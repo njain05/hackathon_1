@@ -64,10 +64,12 @@ export const getPublished = (ref: string) => call<PublicTimetable>(`/colleges/${
 export const getAdminCollege = (a: Pick<AdminAccess, "code" | "key">) =>
   call<AdminCollege>(`/colleges/${enc(a.code)}/admin`, { headers: { "X-Admin-Key": a.key } });
 
-export const saveDraft = (a: AdminAccess, d: CollegeData) =>
+/** `basedOn`: the updated_at of the online copy this one started from. If someone saved since
+ * (a department, another device), the server refuses with 409 instead of overwriting their work. */
+export const saveDraft = (a: AdminAccess, d: CollegeData, basedOn?: string | null) =>
   call<{ updated_at: string }>(`/colleges/${enc(a.code)}/data`, {
     method: "PUT",
-    headers: asAdmin(a),
+    headers: { ...asAdmin(a), ...(basedOn ? { "X-Based-On": basedOn } : {}) },
     body: JSON.stringify(d),
   });
 
@@ -123,6 +125,12 @@ export const readAdminAccess = () => parse<AdminAccess>(readLocal(ADMIN_KEY));
 export function readSyncedAt(code: string): number | null {
   const s = parse<{ code: string; at: string }>(readLocal(SYNC_KEY));
   return s?.code === code ? Date.parse(s.at) : null;
+}
+
+/** The same time exactly as the server wrote it, to send back as X-Based-On. */
+export function readSyncedStamp(code: string): string | null {
+  const s = parse<{ code: string; at: string }>(readLocal(SYNC_KEY));
+  return s?.code === code ? s.at : null;
 }
 
 export const writeSyncedAt = (code: string, at: string) => writeLocal(SYNC_KEY, JSON.stringify({ code, at }));

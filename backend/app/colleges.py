@@ -233,12 +233,26 @@ def save_draft(
     college: AdminCollegeDep,
     session: DbSession,
     data: Annotated[dict[str, Any], Body()],
+    x_based_on: Annotated[str | None, Header()] = None,
 ) -> SavedDraft:
-    """Admin: autosave the setup draft. Incomplete data is fine; it is checked at Generate."""
+    """Admin: autosave the setup draft. Incomplete data is fine; it is checked at Generate.
+    With X-Based-On (the updated_at this copy was based on), a save over newer work (a department's
+    save, or another device) is refused with 409, so nothing is overwritten unseen."""
     check_draft_size(data)
+    draft = session.get(CollegeDraft, college.id)
+    if x_based_on and draft is not None:
+        try:
+            based_on = datetime.fromisoformat(x_based_on)
+        except ValueError:
+            raise HTTPException(400, "X-Based-On must be the updated_at time from the last save.") from None
+        if as_utc(draft.updated_at) != as_utc(based_on):
+            raise HTTPException(
+                409,
+                "The setup was changed online since this copy was saved (by a department or another device). "
+                "Reload it before saving, so their changes aren't lost.",
+            )
     if isinstance(data.get("name"), str) and data["name"].strip():
         college.name = data["name"].strip()[:200]
-    draft = session.get(CollegeDraft, college.id)
     stamp = now()
     if draft is None:
         session.add(CollegeDraft(college_id=college.id, data=data, updated_at=stamp))
