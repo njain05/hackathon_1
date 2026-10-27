@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { CopyField } from "@/components/share/CloudSave";
 import { ApiError } from "@/lib/api";
-import { getIncharge, inchargeLink, makeIncharge, staffCode, staffId, type InchargeOut, type Staff } from "@/lib/departments";
+import { createAccount, makeInchargeAccount, type MadeAccount } from "@/lib/accounts";
+import { getIncharge, staffCode, staffId, type InchargeOut, type Staff } from "@/lib/departments";
 
-/** HOD (or Dean): choose the teacher who makes this department's timetable, and give them their link. */
+/** HOD (or Dean): choose the teacher who makes this department's timetable, and give them their sign-in. */
 export default function InchargeLink({
   staff,
   dept,
@@ -18,7 +19,8 @@ export default function InchargeLink({
 }) {
   const [current, setCurrent] = useState<InchargeOut | null>(null);
   const [teacher, setTeacher] = useState("");
-  const [link, setLink] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
+  const [made, setMade] = useState<MadeAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -34,15 +36,20 @@ export default function InchargeLink({
   const appoint = async () => {
     const t = teachers.find((x) => x.id === teacher);
     if (!t) return;
-    if (current?.name && !window.confirm(`Make ${t.name} the timetable in-charge? ${current.name}'s link will stop working.`)) return;
+    if (current?.name && !window.confirm(`Make ${t.name} the timetable in-charge? ${current.name}'s sign-in will stop working.`)) return;
     setBusy(true);
     setError(null);
     try {
-      const r = await makeIncharge(staff, dept, t.name, t.id);
-      setCurrent(r);
-      if (r.key) setLink(inchargeLink(staffCode(staff), r.key));
+      const user = username.trim() || `${t.id.toLowerCase()}.incharge`;
+      const r =
+        "admin" in staff
+          ? await createAccount(staff.admin, { role: "incharge", username: user, name: t.name, department_id: dept })
+          : await makeInchargeAccount(staff.member.college_code, staff.member.key, dept, user, t.name);
+      setMade(r);
+      setCurrent({ department_id: dept, name: t.name, since: new Date().toISOString(), key: null });
+      setUsername("");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't make the link. Try again.");
+      setError(e instanceof ApiError ? e.message : "Couldn't make the sign-in. Try again.");
     } finally {
       setBusy(false);
     }
@@ -70,16 +77,31 @@ export default function InchargeLink({
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-1">
+          <span className="field-label">Username (optional)</span>
+          <input
+            className="field w-48"
+            value={username}
+            placeholder={teacher ? `${teacher.toLowerCase()}.incharge` : "e.g. hk.incharge"}
+            autoCapitalize="none"
+            autoComplete="off"
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </label>
         <button type="button" className="btn-primary" disabled={!teacher || busy} onClick={appoint}>
-          {busy ? "Making link…" : "Make in-charge link"}
+          {busy ? "Making sign-in…" : "Make in-charge sign-in"}
         </button>
       </div>
       {error && <p className="font-semibold text-err">{error}</p>}
-      {link && (
+      {made && (
         <div className="flex flex-col gap-2 rounded-md bg-blush/60 p-3">
-          <p className="font-semibold">Send this link to {current?.name} privately. It works like their password for {dept}&apos;s setup.</p>
-          <CopyField label="In-charge link" value={link} />
-          <p className="hint">It is shown only once. Making a new link later stops this one.</p>
+          <p className="font-semibold">Give these to {made.name} privately. They sign in at the Sign in page.</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <CopyField label="College code" value={staffCode(staff)} />
+            <CopyField label="Username" value={made.username} />
+            <CopyField label="Password" value={made.password} />
+          </div>
+          <p className="hint">The password is shown only once. They can change it after signing in.</p>
         </div>
       )}
     </section>

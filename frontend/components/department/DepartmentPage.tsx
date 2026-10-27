@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppNav from "@/components/AppNav";
 import DataTable from "@/components/setup/DataTable";
@@ -130,8 +131,12 @@ export default function DepartmentPage() {
         <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-4 px-4 py-16">
           <h1 className="text-3xl font-bold">Department setup</h1>
           <p className="text-lg text-ink-soft">
-            This page is for a department&apos;s HOD or timetable in-charge. Open the link you were given by your HOD or the Dean.
+            This page is for a department&apos;s HOD or timetable in-charge. Sign in with the username and password your HOD or the Dean
+            gave you.
           </p>
+          <Link href="/login" className="btn-primary w-fit !px-5 !py-3 !text-base">
+            Sign in
+          </Link>
           {opening.error && <p className="font-semibold text-err">{opening.error}</p>}
         </main>
       </>

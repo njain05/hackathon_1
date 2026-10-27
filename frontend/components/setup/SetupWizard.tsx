@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import AppNav from "@/components/AppNav";
 import MoreMenu from "@/components/ui/MoreMenu";
 import { AdminLinkNotice, CloudSave, useOpenAdminLink } from "@/components/share/CloudSave";
-import { readAdminAccess, setAdminAccess } from "@/lib/cloud";
+import { signOut } from "@/lib/accounts";
+import { readAdminAccess } from "@/lib/cloud";
+import { clearTimetable } from "@/lib/result";
 import { ApiError, getSample } from "@/lib/api";
 import { downloadWorkbook, importWorkbook, readSpreadsheet, sheetsIn } from "@/lib/excel";
 import { useAccess } from "@/lib/access";
@@ -228,6 +230,22 @@ export default function SetupWizard() {
     window.scrollTo({ top: 0 });
   };
 
+  // A clean start: this device forgets the setup, its timetable and who is signed in.
+  // Nothing online is deleted; signing in again brings that college back.
+  const startNew = () => {
+    const online = readAdminAccess();
+    const message = online
+      ? `Start a new college? This browser forgets ${data.name || online.code}: its setup, its timetable and your sign-in here. Nothing saved online is deleted; sign in again to come back to it.`
+      : "Start a new college? Everything entered so far is cleared from this browser.";
+    if (!window.confirm(message)) return;
+    signOut(); // first, so autosave can't upload the empty setup over the online copy
+    clearTimetable();
+    replaceData(null);
+    setReport(null);
+    setStep("week");
+    window.scrollTo({ top: 0 });
+  };
+
   const importAll = async (file: File) => {
     try {
       const sheets = await readSpreadsheet(file);
@@ -271,28 +289,15 @@ export default function SetupWizard() {
             e.target.value = "";
           }}
         />
+        <button type="button" className="btn-quiet" onClick={startNew}>
+          Start a new college
+        </button>
         {/* Less-used actions in one menu, so the steps come first. */}
         <MoreMenu
-          label="Excel & more"
+          label="Excel"
           actions={[
             { label: "Download Excel workbook", onClick: () => downloadWorkbook(data) },
             { label: "Import workbook", onClick: () => fileRef.current?.click() },
-            {
-              label: "Start over",
-              danger: true,
-              onClick: () => {
-                const online = readAdminAccess();
-                const message = online
-                  ? `Start over? This clears the setup from this browser and disconnects it from ${online.code}. The copy saved online stays as it is; open your admin link to continue it later.`
-                  : "Start over? Everything entered so far will be cleared from this browser.";
-                if (window.confirm(message)) {
-                  // Disconnect first, so autosave can't upload the empty setup over the online copy.
-                  setAdminAccess(null);
-                  replaceData(null);
-                  setReport(null);
-                }
-              },
-            },
           ]}
         />
       </header>
