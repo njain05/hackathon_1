@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
+import { setDeanSignIn, signIn, useAccount } from "@/lib/accounts";
 import {
   adminFromHash,
   adminLink,
@@ -22,6 +23,15 @@ import type { CollegeData } from "@/lib/types";
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
+
+/** What a copy of the setup holds, in a line, so two copies can be told apart. */
+function describe(d: CollegeData): string {
+  const n = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
+  return `“${d.name.trim() || "no name"}”: ${n(d.departments.length, "department")}, ${n(d.teachers.length, "teacher")}, ${n(
+    d.sections.length,
+    "section",
+  )}, ${n(d.subjects.length, "subject")}, ${n(d.rooms.length, "room")}`;
+}
 
 /** JSON with sorted keys, so two copies of the same data compare equal. */
 function stable(v: unknown): string {
@@ -75,29 +85,165 @@ export function CopyField({ label, value, big }: { label: string; value: string;
   );
 }
 
-/** The admin link (secret) and the share link + code (public). */
-function LinksCard({ access, justCreated, onClose }: { access: AdminAccess; justCreated: boolean; onClose: () => void }) {
+/** The Dean chooses the username and password they sign in with, then this device is signed in as them. */
+function DeanSignIn({ access, signedInAs }: { access: AdminAccess; signedInAs: string | null }) {
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    if (password !== again) {
+      setError("The two passwords are different. Type the same one in both boxes.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const row = await setDeanSignIn(access, username.trim(), password, name.trim() || "Dean");
+      await signIn(access.code, row.username, password);
+      setPassword("");
+      setAgain("");
+    } catch (e) {
+      setError(errorText(e, "Couldn't save your sign-in. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <section aria-label="Your links" className="flex flex-col gap-4 rounded-md border border-line bg-paper p-4">
-      <div className="flex flex-col gap-3 rounded-md border-2 border-err/40 bg-blush p-3">
-        <p className="text-lg font-bold">Save this link, it is your password.</p>
-        <p className="text-sm">
-          It is the only way back into this college’s setup, from this or any other device. Anyone who has it can change
-          your timetable, so keep it private: save it in your notes or email it to yourself.
-        </p>
-        <CopyField label="Your admin link (secret)" value={adminLink(access)} />
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className="field-label">Your name (optional)</span>
+          <input className="field" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Dr. A. Singh, Dean Academics" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="field-label">Username</span>
+          <input
+            className="field"
+            required
+            maxLength={60}
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="e.g. dean"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="field-label">Password (at least 6 characters)</span>
+          <input
+            type="password"
+            className="field"
+            required
+            minLength={6}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="field-label">Type the password again</span>
+          <input
+            type="password"
+            className="field"
+            required
+            minLength={6}
+            autoComplete="new-password"
+            value={again}
+            onChange={(e) => setAgain(e.target.value)}
+          />
+        </label>
       </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className="btn-primary" disabled={busy}>
+          {busy ? "Saving…" : signedInAs ? "Change my sign-in" : "Save my sign-in"}
+        </button>
+        {error && (
+          <p role="alert" className="font-semibold text-err">
+            {error}
+          </p>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/** How the Dean signs in from now on, the share link + code (public), and the admin link as a backup. */
+function LinksCard({
+  access,
+  justCreated,
+  signedInAs,
+  onClose,
+}: {
+  access: AdminAccess;
+  justCreated: boolean;
+  /** The Dean's username once they are signed in on this device. */
+  signedInAs: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <section aria-label="Your sign-in and links" className="flex flex-col gap-4 rounded-md border border-line bg-paper p-4">
+      {signedInAs ? (
+        <div role="status" className="flex flex-col gap-1 rounded-md border border-ok/40 bg-mint/60 p-3">
+          <p className="text-lg font-bold">You sign in as “{signedInAs}”.</p>
+          <p>
+            On any device: open <strong>Sign in</strong>, type the college code <strong>{access.code}</strong>, your username
+            and your password. Give HODs, teachers and students their own sign-ins on the{" "}
+            <Link href="/people" className="font-semibold text-navy underline">
+              People &amp; sign-ins
+            </Link>{" "}
+            page.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-md border-2 border-sky bg-cream p-3">
+          <div>
+            <p className="text-lg font-bold">Choose how you’ll sign in</p>
+            <p className="text-sm">
+              You are the Dean (the admin) of {access.name}. With this username and password, and the college code{" "}
+              <strong>{access.code}</strong>, you can get back in from any device.
+            </p>
+          </div>
+          <DeanSignIn access={access} signedInAs={signedInAs} />
+        </div>
+      )}
+      {signedInAs && (
+        <details className="rounded-md border border-line bg-cream p-3">
+          <summary className="cursor-pointer font-semibold">Change my username or password</summary>
+          <div className="pt-3">
+            <DeanSignIn access={access} signedInAs={signedInAs} />
+          </div>
+        </details>
+      )}
       <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
         <CopyField label="Share link for students and teachers" value={shareLink(access)} />
         <CopyField label="College code" value={access.code} big />
       </div>
       <p className="hint">
-        Students and teachers open the share link, or type the code on the My timetable page. They see the timetable
-        once you press <strong>Publish timetable</strong> on the Timetables page. They can never change anything.
+        Students and teachers sign in with the college code, or open the share link. They see the timetable once you press{" "}
+        <strong>Publish timetable</strong> on the Timetables page. They can never change anything.
       </p>
+      <details className="rounded-md border border-line p-3">
+        <summary className="cursor-pointer font-semibold">Backup: your admin link (secret)</summary>
+        <div className="flex flex-col gap-2 pt-3">
+          <p className="text-sm">
+            Opens this college’s setup without a password, so keep it private. Use it if you forget your password.
+          </p>
+          <CopyField label="Your admin link (secret)" value={adminLink(access)} />
+        </div>
+      </details>
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className="btn-primary" onClick={onClose}>
-          {justCreated ? "I’ve saved my admin link" : "Close"}
+        <button type="button" className={signedInAs || !justCreated ? "btn-primary" : "btn-quiet"} onClick={onClose}>
+          {!justCreated ? "Close" : signedInAs ? "Done" : "Later (keep the admin link safe meanwhile)"}
         </button>
         {!justCreated && (
           <button
@@ -106,7 +252,7 @@ function LinksCard({ access, justCreated, onClose }: { access: AdminAccess; just
             onClick={() => {
               if (
                 window.confirm(
-                  "Stop saving to this college from this browser? The college stays online. You can get back in with your admin link.",
+                  "Stop saving to this college from this browser? The college stays online. You can get back in by signing in, or with your admin link.",
                 )
               )
                 setAdminAccess(null);
@@ -136,7 +282,9 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
   const access = useAdminAccess();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
   const [showLinks, setShowLinks] = useState<"closed" | "open" | "new">("closed");
+  const account = useAccount();
   const [save, setSave] = useState<SaveState>({ kind: "checking" });
   const lastSaved = useRef<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -206,12 +354,21 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
   if (access === undefined) return null;
 
   if (!access) {
+    const unnamed = !data.name.trim();
     const create = async () => {
+      // The college's name is its share link and what everyone sees, so ask for it rather than invent one.
+      const name = data.name.trim() || newName.trim();
+      if (!name) {
+        setCreateError("Type your college’s name first.");
+        return;
+      }
+      const named = unnamed ? { ...data, name } : data;
       setCreating(true);
       setCreateError(null);
       try {
-        const c = await createCollege(data.name, data);
-        lastSaved.current = stable(data);
+        const c = await createCollege(name, named);
+        if (unnamed) replaceData(named);
+        lastSaved.current = stable(named);
         setAdminAccess({ code: c.code, slug: c.slug, name: c.name, key: c.admin_key });
         setShowLinks("new");
       } catch (e) {
@@ -227,7 +384,19 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
             <span className="font-semibold">Saved only in this browser.</span>{" "}
             <span className="text-ink-soft">Save it online to work from another device and share the timetable with everyone.</span>
           </p>
-          <button type="button" className="btn-primary" disabled={creating} onClick={create}>
+          {unnamed && (
+            <label className="flex flex-col gap-1">
+              <span className="field-label">College name</span>
+              <input
+                className="field"
+                maxLength={120}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Guru Nanak Dev Engineering College"
+              />
+            </label>
+          )}
+          <button type="button" className="btn-primary" disabled={creating || (unnamed && !newName.trim())} onClick={create}>
             {creating ? "Saving online…" : "Save online & share"}
           </button>
           {createError && <p className="w-full font-semibold text-err">{createError}</p>}
@@ -268,7 +437,7 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
           )}
           {showLinks === "closed" && (
             <button type="button" className="btn-quiet" onClick={() => setShowLinks("open")}>
-              Share links
+              Sign-in &amp; share links
             </button>
           )}
           <Link href="/approvals" className="btn-quiet">
@@ -279,9 +448,18 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
         {save.kind === "conflict" && (
           <div role="alert" className="flex flex-col gap-2 rounded-md border border-line bg-blush p-3">
             <p className="font-semibold">
-              Someone saved changes online since this browser last saved (a department, or you on another device)
-              {save.at ? `, at ${when(save.at)}` : ""}. Nothing was overwritten. Which copy do you want to keep?
+              This browser’s setup and the online copy of {access.name} are different. Nothing was overwritten. Which copy
+              do you want to keep?
             </p>
+            <ul className="flex flex-col gap-1 text-sm">
+              <li>
+                <span className="font-semibold">Online copy</span>
+                {save.at ? ` (saved ${when(save.at)}, by a department or on another device)` : ""}: {describe(save.online)}
+              </li>
+              <li>
+                <span className="font-semibold">This browser’s copy</span>: {describe(data)}
+              </li>
+            </ul>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -312,14 +490,24 @@ export function CloudSave({ data, replaceData }: { data: CollegeData; replaceDat
         )}
 
         {showLinks !== "closed" && (
-          <LinksCard access={access} justCreated={showLinks === "new"} onClose={() => setShowLinks("closed")} />
+          <LinksCard
+            access={access}
+            justCreated={showLinks === "new"}
+            signedInAs={account?.role === "dean" && account.college_code === access.code ? account.username : null}
+            onClose={() => setShowLinks("closed")}
+          />
         )}
       </div>
     </div>
   );
 }
 
-export type OpenLinkState = { kind: "idle" } | { kind: "loading" } | { kind: "error"; message: string } | { kind: "opened"; name: string };
+export type OpenLinkState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  /** `keptLocal`: this browser had another setup, so it wasn't replaced (CloudSave asks which to keep if they differ). */
+  | { kind: "opened"; name: string; keptLocal: boolean };
 
 /**
  * Opening the admin link (/setup#college=…&key=…): check the key, remember it
@@ -347,8 +535,9 @@ export function useOpenAdminLink(loaded: boolean, hasData: boolean, replaceData:
           setAdminAccess({ code: c.code, slug: c.slug, name: c.name, key: link.key });
           // An empty browser takes the online copy. If this browser already has a
           // different setup, CloudSave asks which one to keep.
-          if (c.data && (!latest.current.hasData || before?.code === c.code)) latest.current.replaceData(c.data);
-          setState({ kind: "opened", name: c.name });
+          const take = Boolean(c.data && (!latest.current.hasData || before?.code === c.code));
+          if (take && c.data) latest.current.replaceData(c.data);
+          setState({ kind: "opened", name: c.name, keptLocal: Boolean(c.data) && !take });
         })
         .catch((e: unknown) => live && setState({ kind: "error", message: errorText(e, "Couldn't open this admin link.") }));
     };
@@ -371,7 +560,10 @@ export function AdminLinkNotice({ state, onClose }: { state: OpenLinkState; onCl
           <span className="font-semibold text-err">{state.message}</span>
         ) : (
           <>
-            <span className="font-semibold">Opened {state.name}.</span> This browser now saves to it automatically.
+            <span className="font-semibold">Opened {state.name}.</span>{" "}
+            {state.keptLocal
+              ? "This browser already had a setup of its own, so nothing was replaced yet. If the two differ, choose below which to keep."
+              : "This browser now saves to it automatically."}
           </>
         )}
       </p>
