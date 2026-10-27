@@ -3,6 +3,14 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: Sign-in screens** (UX session, on P1's `lib/accounts.ts` from 064b86d; the user chose passwords for everyone)
+  - `/login`: college code (remembered from the last sign-in), username and password. Errors are the server's own words. After signing in it opens the person's page (`homeFor`: Dean → /today, HOD → /hod, in-charge → /department, teacher → /teacher, student → /my).
+  - Home: one big **Sign in**, plus "New college? Set it up" and "Book a room without an account" for clubs. When signed in: "Signed in as NAME (ROLE, college)" with Go to my page and Sign out.
+  - Top bar: signed out shows **Sign in** and Events (plus Setup and Timetables only while a new college is being created on the device). Signed in shows only that person's pages (students: My timetable, Book a room, Events) and a "Name · Role ▾" menu with Change password and Sign out; on phones these sit at the bottom of the ☰ Menu.
+  - `/account`: change password (current, new, again; at least 6 characters like the server).
+  - My timetable: a signed-in student is locked to their own section (no student/teacher switch, no Change, no Change college).
+  - Checked in the browser with local test accounts: wrong password message, student lands on /my locked to CSE-3A, password change, sign out clears access, Dean lands on /today with every Dean page, phone menu fits 375px.
+  - e2e: 14/15. `main-flows.spec.ts:35` still expects a signed-out share-link visitor to see "My timetable"; under the new rule they see Sign in, so P1 is updating that test.
 - **2026-10-27: The Dean's autosave never overwrites a department's newer save** (bug P1 found)
   - `PUT /colleges/{ref}/data` takes `X-Based-On` (the updated_at the copy started from). If the draft changed since (a department's scoped save, a room-share approval, or the Dean on another device), it returns 409 and keeps the newer copy. Clients without the header work as before.
   - CloudSave sends it on every autosave. On a 409 it re-checks and asks: "Someone saved changes online since this browser last saved (a department, or you on another device)… Nothing was overwritten. Which copy do you want to keep?" The options are "Use the online copy" or "Keep this browser's copy (replaces theirs)".

@@ -1,72 +1,53 @@
 "use client";
 
 import Link from "next/link";
-import { useAccess } from "@/lib/access";
-import { useAdminAccess } from "@/lib/cloud";
-import { useMemberAccess } from "@/lib/members";
+import { homeFor, ROLE_NAME, signOut, useAccount } from "@/lib/accounts";
 
-interface Role {
-  href: string;
-  title: string;
-  text: string;
-}
-
-/**
- * "Who are you?": one big card per kind of person, so nobody has to read the whole menu.
- * HOD and in-charge cards appear only on a device holding that private link.
- */
+/** Home's one clear start: Sign in, or (already signed in) straight to your own page. */
 export default function RolePicker() {
-  const admin = useAdminAccess();
-  const teacher = useMemberAccess("teacher");
-  const hod = useMemberAccess("hod");
-  const incharge = useMemberAccess("incharge");
-  const access = useAccess();
+  const account = useAccount();
 
-  const roles: Role[] = [
-    { href: "/my", title: "Student", text: "Your class timetable for today and the week." },
-    {
-      href: teacher ? "/teacher" : "/my",
-      title: "Teacher",
-      text: teacher ? "Your classes, changes and leave." : "Your classes for today and the week.",
-    },
-    ...(hod
-      ? [{ href: "/hod", title: `HOD, ${hod.department_name}`, text: "Leave, cover and hall requests from your department." }]
-      : []),
-    ...(incharge && !hod
-      ? [{ href: "/department", title: "Department in-charge", text: "Your department's part of the setup." }]
-      : []),
-    { href: "/book", title: "Event organiser", text: "Book a seminar hall or auditorium and track the approval." },
-    {
-      href: admin ? "/today" : "/setup",
-      title: "Dean",
-      text: admin
-        ? "What needs doing today: cover, approvals, publishing."
-        : access?.staff
-          ? "Carry on setting up your college."
-          : "Set up your college and generate a clash-free timetable.",
-    },
-  ];
+  if (account === undefined) return <div className="h-32" aria-hidden />; // keep the layout still while loading
+
+  if (account)
+    return (
+      <section aria-label="Your account" className="flex flex-col gap-4 rounded-lg border border-line bg-paper p-6">
+        <p className="text-lg">
+          Signed in as <span className="font-bold">{account.name}</span>{" "}
+          <span className="text-ink-soft">
+            ({ROLE_NAME[account.role]}, {account.college_name})
+          </span>
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href={homeFor(account.role)} className="btn-primary !px-5 !py-3 !text-base">
+            Go to my page <span aria-hidden>→</span>
+          </Link>
+          <button type="button" className="btn-quiet !px-5 !py-3 !text-base" onClick={() => signOut()}>
+            Sign out
+          </button>
+        </div>
+      </section>
+    );
 
   return (
-    <section aria-labelledby="who" className="flex flex-col gap-3">
-      <h2 id="who" className="text-xl font-bold">
-        Who are you?
-      </h2>
-      <ul className="grid gap-3 sm:grid-cols-2">
-        {roles.map((r) => (
-          <li key={r.title}>
-            <Link
-              href={r.href}
-              className="flex h-full flex-col gap-1 rounded-lg border border-line bg-paper p-5 hover:border-navy hover:bg-blush/40 focus-visible:border-navy"
-            >
-              <span className="text-lg font-bold text-navy">
-                {r.title} <span aria-hidden>→</span>
-              </span>
-              <span className="text-ink-soft">{r.text}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <section aria-label="Start" className="flex flex-col gap-4">
+      <Link href="/login" className="btn-primary w-fit !px-8 !py-4 !text-lg">
+        Sign in <span aria-hidden>→</span>
+      </Link>
+      <p className="text-ink-soft">
+        Your college gives you a username and password. New college?{" "}
+        <Link href="/setup" className="font-semibold text-navy underline">
+          Set it up
+        </Link>
+        .
+      </p>
+      <p className="hint">
+        Organising an event?{" "}
+        <Link href="/book" className="font-semibold text-navy underline">
+          Book a room
+        </Link>{" "}
+        without an account.
+      </p>
     </section>
   );
 }

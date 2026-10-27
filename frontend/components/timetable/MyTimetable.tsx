@@ -6,6 +6,7 @@ import AskBox from "@/components/ask/AskBox";
 import { ChangesChecking, ChangesFeed, ChangesUnknown, useMyDay } from "@/components/changes/MyChanges";
 import { CollegeCodeForm, OpenCollegePage } from "@/components/share/OpenCollege";
 import { localNow } from "@/lib/ask";
+import { useAccount } from "@/lib/accounts";
 import { isoDate, nextDateFor } from "@/lib/changes";
 import { setViewedCollege, useViewerTimetable } from "@/lib/cloud";
 import { buildRows, entriesFor, timeRange, type Cell, type ViewKind } from "@/lib/grid";
@@ -166,6 +167,9 @@ export default function MyTimetable() {
   const [changing, setChanging] = useState(false);
   const [picking, setPicking] = useState(false); // show the full "I am a…" picker again
   const rawMe = useLocal(ME_KEY);
+  const account = useAccount();
+  // A signed-in student sees only their own section: no switching role, section or college.
+  const student = account?.role === "student" ? account : null;
   const clock = useClock();
   // Today's real timetable (with leave cover, cancellations, extra classes) from the server.
   // With ?now=Monday 10:15, "today" is the next Monday.
@@ -181,7 +185,7 @@ export default function MyTimetable() {
   const [role, setRole] = useState<Me["role"] | null>(null);
 
   // Wait for the clock too (a moment after opening), so Today never pushes the week down.
-  if (source.kind === "loading" || rawMe === undefined || !clock) return <PageLoading />;
+  if (source.kind === "loading" || rawMe === undefined || account === undefined || !clock) return <PageLoading />;
   if (source.kind === "none")
     return (
       <>
@@ -191,9 +195,9 @@ export default function MyTimetable() {
     );
 
   const { data, result } = source.stored;
-  const activeRole = role ?? me?.role ?? "section";
+  const activeRole = student ? "section" : (role ?? me?.role ?? "section");
   const options = choices(data, activeRole);
-  const remembered = me?.ids?.[activeRole] ?? (me?.role === activeRole ? me.id : "");
+  const remembered = student?.section_id ?? me?.ids?.[activeRole] ?? (me?.role === activeRole ? me.id : "");
   const myId = remembered && options.some((o) => o.id === remembered) ? remembered : "";
   const mine = myId ? entriesFor(result.entries, activeRole, myId) : [];
   const myLabel = options.find((o) => o.id === myId)?.label;
@@ -217,9 +221,11 @@ export default function MyTimetable() {
             <p className="text-ink-soft">
               {source.college.name}, college code <span className="font-semibold text-ink">{source.college.code}</span>.
               Published {when(source.stored.at)}.{" "}
-              <button type="button" className="font-semibold text-navy underline print:hidden" onClick={() => setChanging(true)}>
-                Change college
-              </button>
+              {!student && (
+                <button type="button" className="font-semibold text-navy underline print:hidden" onClick={() => setChanging(true)}>
+                  Change college
+                </button>
+              )}
             </p>
           ) : (
             <p className="text-ink-soft print:hidden">
@@ -272,13 +278,20 @@ export default function MyTimetable() {
               <span className="text-ink-soft">{activeRole === "section" ? "Your section:" : "Your name:"}</span>{" "}
               <span className="font-semibold">{myLabel ?? myId}</span>
             </p>
-            <button type="button" className="font-semibold text-navy underline" onClick={() => setPicking(true)}>
-              Change
-            </button>
+            {!student && (
+              <button type="button" className="font-semibold text-navy underline" onClick={() => setPicking(true)}>
+                Change
+              </button>
+            )}
             <button type="button" className="btn-quiet ml-auto" onClick={() => window.print()}>
               Print my timetable
             </button>
           </div>
+        ) : student ? (
+          <p role="status" className="rounded-md border border-line bg-paper p-4">
+            Your section ({student.section_id ?? "not set"}) isn’t in the published timetable yet. Ask your college’s Dean’s
+            office.
+          </p>
         ) : (
           <div className="flex flex-wrap items-end gap-4 print:hidden">
             <div role="group" aria-label="I am a" className="flex rounded-md border border-line bg-paper p-1">
@@ -324,7 +337,7 @@ export default function MyTimetable() {
         )}
 
         {!myId ? (
-          <p className="text-lg text-ink-soft">
+          !student && <p className="text-lg text-ink-soft">
             Choose your {activeRole === "section" ? "section" : "name"} to see your week. This browser will remember it.
           </p>
         ) : (

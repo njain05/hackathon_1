@@ -11,7 +11,7 @@ export default function Home() {
         <h1 className="text-4xl font-bold sm:text-5xl">College Timetable</h1>
         <p className="max-w-xl text-lg text-ink-soft">
           One place for the whole college. The Dean’s office builds a clash-free timetable, teachers and students see their own
-          week, and organisers book halls without paper letters.
+          week, and organisers book rooms without paper letters.
         </p>
       </div>
       <RolePicker />
