@@ -125,8 +125,15 @@ export default function PublishBar({ stored }: { stored: StoredTimetable }) {
       </section>
     );
 
-  const isLive = mark?.code === access.code && mark.at === stored.at;
   const liveNow = online?.code === access.code && online.version ? online : null;
+  // Live if this browser published it, or if it *is* the published copy (the Dean signed in on another device).
+  const shownLive =
+    mark?.code === access.code && mark.at === stored.at
+      ? { version: mark.version, published_at: mark.published_at }
+      : liveNow?.version && liveNow.at && liveNow.at === stored.at
+        ? { version: liveNow.version, published_at: liveNow.at }
+        : null;
+  const isLive = shownLive !== null;
   const published = Boolean(liveNow || isLive);
   const unpublished = () => setOnline({ code: access.code, version: null, at: null });
 
@@ -144,12 +151,12 @@ export default function PublishBar({ stored }: { stored: StoredTimetable }) {
     }
   };
 
-  if (isLive && (!liveNow || liveNow.version === mark.version))
+  if (shownLive && (!liveNow || liveNow.version === shownLive.version))
     return (
       <section aria-live="polite" className="flex flex-col gap-3 rounded-md border border-ok/40 bg-mint/60 p-4 print:hidden">
         <p>
-          <span className="font-semibold text-ok">Live for everyone.</span> Version {mark.version}, published{" "}
-          {when(mark.published_at)}. Students and teachers open the share link, or type the college code on My timetable.
+          <span className="font-semibold text-ok">Live for everyone.</span> Version {shownLive.version}, published{" "}
+          {when(shownLive.published_at)}. Students and teachers open the share link, or type the college code on My timetable.
         </p>
         <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
           <CopyField label="Share link" value={shareLink(access)} />

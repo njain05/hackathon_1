@@ -135,3 +135,33 @@ def test_hod_makes_the_incharge_and_too_many_tries_lock(sample_result: SolveResu
     for _ in range(5):
         assert login(c["code"], "hod.cse", "wrong-pass").status_code == 401
     assert login(c["code"], "hod.cse", pw).status_code == 429
+
+
+def test_the_demo_college_stays_intact_but_can_still_be_tried(sample_result: SolveResult) -> None:
+    c = college(sample_result)
+    base = f"/colleges/{c['code']}"
+    client.post(f"{base}/accounts/dean", json={"username": "dean", "password": "demo1234"}, headers=c["admin"])
+    client.post(f"{base}/accounts", json={"role": "student", "username": "student", "section_id": "CSE-3A", "password": "demo1234"}, headers=c["admin"])
+    client.post(f"{base}/accounts", json={"role": "hod", "username": "hod", "department_id": "CSE", "password": "demo1234"}, headers=c["admin"])
+    assert client.post(f"{base}/demo", headers=c["admin"]).status_code == 204
+    dean = {"X-Admin-Key": login(c["code"], "dean", "demo1234").json()["key"]}
+    data = sample_college().model_dump(mode="json")
+
+    refused = [
+        client.put(f"{base}/data", json=data, headers=dean),
+        client.delete(f"{base}/timetable", headers=dean),
+        client.post(f"{base}/publish", json={"data": data, "result": sample_result.model_dump(mode="json")}, headers=dean),
+        client.post(f"{base}/accounts/dean", json={"username": "dean", "password": "hacked99"}, headers=dean),
+        client.post(f"{base}/accounts/student/reset", headers=dean),
+        client.delete(f"{base}/accounts/hod", headers=dean),
+        client.post(f"{base}/accounts", json={"role": "hod", "username": "newhod", "department_id": "CSE"}, headers=dean),
+        client.post(f"{base}/departments/CSE/hod", json={"name": "X"}, headers=dean),
+        client.post(f"{base}/password", json={"username": "student", "old_password": "demo1234", "new_password": "hacked99"}),
+    ]
+    for r in refused:
+        assert r.status_code == 403 and "shared demo college" in r.json()["detail"], r.text
+    # Still the same: everyone signs in, the timetable is live.
+    assert login(c["code"], "student", "demo1234").status_code == 200
+    assert client.get(f"{base}/timetable").status_code == 200
+    # New students can still be tried.
+    assert client.post(f"{base}/accounts", json={"role": "student", "username": "21cse009", "section_id": "CSE-3A"}, headers=dean).status_code == 201

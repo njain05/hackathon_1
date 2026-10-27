@@ -27,6 +27,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from .colleges import AdminCollegeDep, DbSession, find_college, hash_key, latest
 from .db import Base, College, CollegeDraft, Member, as_utc, now
+from .demo import DEMO_USERNAMES, DemoCollege, is_demo, refuse_if_demo
 from .departments import StaffDep, current_incharge
 
 router = APIRouter(tags=["accounts"])
@@ -209,6 +210,8 @@ def change_password(ref: str, body: PasswordIn, session: DbSession) -> None:
     a = find_account(session, college, body.username)
     if a is None or not check_password(a, body.old_password):
         raise HTTPException(401, "Your current password isn't right.")
+    if a.username in DEMO_USERNAMES:
+        refuse_if_demo(session, college, "the demo sign-ins' passwords")
     check_new_password(body.new_password)
     set_password(a, body.new_password, open_key(a, body.old_password))
     session.commit()
@@ -248,6 +251,7 @@ def account_out(a: Account) -> AccountOut:
 @router.post("/colleges/{ref}/accounts/dean", response_model=AccountOut)
 def set_dean(body: DeanIn, college: AdminCollegeDep, session: DbSession, x_admin_key: Annotated[str, Header()]) -> AccountOut:
     """The Dean (with the admin link) chooses their username and password. Doing it again replaces them."""
+    refuse_if_demo(session, college, "the Dean's sign-in")
     username = clean_username(body.username)
     check_new_password(body.password)
     other = find_account(session, college, username)
@@ -328,6 +332,8 @@ def make_account(session: Session, college: College, body: NewAccount, data: dic
 @router.post("/colleges/{ref}/accounts", response_model=Made, status_code=201)
 def create_account(body: NewAccount, college: AdminCollegeDep, session: DbSession) -> Made:
     """Dean: a sign-in for an HOD, in-charge, teacher or student. The password is shown once."""
+    if body.role != "student":
+        refuse_if_demo(session, college, "its staff sign-ins (new students are fine)")
     made = make_account(session, college, body, college_data(session, college))
     session.commit()
     return made
@@ -353,6 +359,8 @@ class BulkOut(BaseModel):
 @router.post("/colleges/{ref}/accounts/bulk", response_model=BulkOut)
 def create_accounts(body: BulkIn, college: AdminCollegeDep, session: DbSession) -> BulkOut:
     """Dean: many teacher or student sign-ins at once (e.g. pasted from Excel). Bad rows are skipped and named."""
+    if body.role != "student":
+        refuse_if_demo(session, college, "its staff sign-ins (new students are fine)")
     data = college_data(session, college)
     made: list[Made] = []
     problems: list[str] = []
@@ -379,6 +387,8 @@ def reset_password(username: str, college: AdminCollegeDep, session: DbSession) 
     a = find_account(session, college, username)
     if a is None:
         raise HTTPException(404, f'No one signs in as "{username}" here.')
+    if a.username in DEMO_USERNAMES:
+        refuse_if_demo(session, college, "the demo sign-ins")
     if a.role == "dean":
         raise HTTPException(409, "Change the Dean's password on the Dean's own page instead.")
     key: str | None = None
@@ -401,6 +411,8 @@ def delete_account(username: str, college: AdminCollegeDep, session: DbSession) 
     a = find_account(session, college, username)
     if a is None:
         raise HTTPException(404, f'No one signs in as "{username}" here.')
+    if a.username in DEMO_USERNAMES:
+        refuse_if_demo(session, college, "the demo sign-ins")
     if a.member_id:
         m = session.get(Member, a.member_id)
         if m is not None and m.revoked_at is None:
@@ -423,6 +435,7 @@ def make_incharge_account(department_id: str, body: InchargeAccountIn, who: Staf
     """The HOD (or the Dean): a sign-in for the department's timetable in-charge. It replaces the old one."""
     if not who.heads(department_id):
         raise HTTPException(403, "Only this department's HOD or the Dean can choose its timetable in-charge.")
+    refuse_if_demo(session, who.college, "its timetable in-charge")
     old = current_incharge(session, who.college, department_id)
     if old is not None:
         old.revoked_at = now()
@@ -433,3 +446,15 @@ def make_incharge_account(department_id: str, body: InchargeAccountIn, who: Staf
     )
     session.commit()
     return made
+
+
+# ---------- The public demo college ----------
+
+
+@router.post("/colleges/{ref}/demo", status_code=204)
+def make_demo(college: AdminCollegeDep, session: DbSession) -> None:
+    """Mark this college as the shared demo: from now on its setup, published timetable and
+    demo sign-ins can't be changed (see app/demo.py). One way only; backend/seed_demo.py calls it."""
+    if not is_demo(session, college):
+        session.add(DemoCollege(college_id=college.id))
+        session.commit()

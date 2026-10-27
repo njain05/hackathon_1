@@ -18,6 +18,7 @@ from solver import CollegeData
 
 from .colleges import AdminCollegeDep, DbSession, find_college, hash_key, latest
 from .db import College, Member, now
+from .demo import refuse_if_demo
 
 router = APIRouter(tags=["members"])
 
@@ -93,6 +94,7 @@ def list_heads(college: AdminCollegeDep, session: DbSession) -> list[HeadOut]:
 @router.post("/colleges/{ref}/departments/{department_id}/hod", response_model=HeadOut)
 def make_head(department_id: str, body: HeadIn, college: AdminCollegeDep, session: DbSession) -> HeadOut:
     """Admin: give a department's HOD a new link (shown once). The previous HOD link stops working."""
+    refuse_if_demo(session, college, "its HOD")
     data = published_data(session, college)
     if data is None or department_id not in {d.id for d in data.departments}:
         raise HTTPException(404, "No such department in the published timetable.")
@@ -136,6 +138,7 @@ def list_teacher_links(college: AdminCollegeDep, session: DbSession) -> list[Tea
 @router.post("/colleges/{ref}/teachers/{teacher_id}/link", response_model=TeacherLinkOut)
 def make_teacher_link(teacher_id: str, college: AdminCollegeDep, session: DbSession) -> TeacherLinkOut:
     """Admin: a teacher's private link to their teacher page (shown once). Their previous link stops working."""
+    refuse_if_demo(session, college, "its teachers' sign-ins")
     data = published_data(session, college)
     teacher = next((t for t in (data.teachers if data else []) if t.id == teacher_id), None)
     if teacher is None:

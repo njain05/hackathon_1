@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from solver import CollegeData, SolveResult, check_timetable
 
 from .db import College, CollegeDraft, PublishedTimetable, as_utc, get_session, log, now, redact
+from .demo import refuse_if_demo
 
 router = APIRouter(prefix="/colleges", tags=["colleges"])
 
@@ -238,6 +239,7 @@ def save_draft(
     """Admin: autosave the setup draft. Incomplete data is fine; it is checked at Generate.
     With X-Based-On (the updated_at this copy was based on), a save over newer work (a department's
     save, or another device) is refused with 409, so nothing is overwritten unseen."""
+    refuse_if_demo(session, college, "its setup")
     check_draft_size(data)
     draft = session.get(CollegeDraft, college.id)
     if x_based_on and draft is not None:
@@ -266,6 +268,7 @@ def save_draft(
 def unpublish(college: AdminCollegeDep, session: DbSession) -> None:
     """Dean: take the timetable down. Students and teachers see "not published yet" until the next publish.
     The setup draft, leave and bookings stay."""
+    refuse_if_demo(session, college, "its published timetable")
     for pub in session.scalars(select(PublishedTimetable).where(PublishedTimetable.college_id == college.id)):
         session.delete(pub)
     session.commit()
@@ -274,6 +277,7 @@ def unpublish(college: AdminCollegeDep, session: DbSession) -> None:
 @router.post("/{ref}/publish", response_model=Published)
 def publish(body: PublishRequest, college: AdminCollegeDep, session: DbSession) -> Published:
     """Admin: make this timetable the live one. It is clash-checked again first."""
+    refuse_if_demo(session, college, "its published timetable")
     if body.result.status != "solved":
         raise HTTPException(400, "Only a generated timetable can be published. Generate one first.")
     report = check_timetable(body.data, body.result.entries)

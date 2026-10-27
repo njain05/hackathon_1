@@ -31,6 +31,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from .colleges import DbSession, check_draft_size, find_college, hash_key
 from .db import Base, College, CollegeDraft, Member, as_utc, now
+from .demo import refuse_if_demo
 
 router = APIRouter(prefix="/colleges", tags=["departments"])
 
@@ -276,6 +277,7 @@ def get_department_setup(department_id: str, who: StaffDep, session: DbSession) 
 def save_department_setup(department_id: str, body: SaveDepartment, who: StaffDep, session: DbSession) -> SavedDepartment:
     """Save one department's rows into the shared setup. Everything else stays as it is."""
     must_run(who, department_id)
+    refuse_if_demo(session, who.college, "its setup")
     check_draft_size(body.data)
     draft = load_draft(session, who.college)
     if department_id not in departments_of(draft.data):
@@ -334,6 +336,7 @@ def make_incharge(department_id: str, body: InchargeIn, who: StaffDep, session: 
     """HOD or Dean: a new timetable in-charge link for the department. The old link stops working."""
     if not who.heads(department_id):
         raise HTTPException(403, "Only this department's HOD or the Dean can choose its timetable in-charge.")
+    refuse_if_demo(session, who.college, "its timetable in-charge")
     draft = load_draft(session, who.college)
     if department_id not in departments_of(draft.data):
         raise HTTPException(404, f'There is no department "{department_id}" in the setup.')

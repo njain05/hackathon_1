@@ -50,6 +50,7 @@ def main(base: str) -> None:
         {"role": "student", "username": "student", "name": "Student (demo)", "section_id": section["id"]},
     ):
         call(base, f"/colleges/{code}/accounts", {**body, "password": PASSWORD}, dean)
+    call(base, f"/colleges/{code}/demo", {}, dean)  # from now on the server keeps it intact
     print(f"Demo college {data['name']}: code {code}, sign-ins dean/hod/incharge/teacher/student, password {PASSWORD}")
     print(f"Teacher = {teacher['name']} ({teacher['id']}), student section = {section['id']}")
 
