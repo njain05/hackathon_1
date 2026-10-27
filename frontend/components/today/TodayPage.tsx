@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api";
 import { getApprovals } from "@/lib/bookings";
 import { type CoverView, getCover, isoDate } from "@/lib/changes";
 import { type AdminCollege, getAdminCollege, useAdminAccess } from "@/lib/cloud";
+import { useRefreshWhenShown } from "@/lib/refresh";
 import PageLoading from "@/components/ui/PageLoading";
 
 const errorText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
@@ -52,11 +53,9 @@ export default function TodayPage() {
 
   useEffect(() => {
     load();
-    // Come back to the tab → show the latest.
-    const again = () => document.visibilityState === "visible" && load();
-    document.addEventListener("visibilitychange", again);
-    return () => document.removeEventListener("visibilitychange", again);
   }, [load]);
+  // Come back to the tab → show the latest (at most every 30 s).
+  useRefreshWhenShown(load);
 
   if (admin === undefined) return <PageLoading />;
   if (!admin)

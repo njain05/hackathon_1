@@ -3,6 +3,8 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: Today page refreshes at most every 30 s when shown again** (UX session, after P2's 2eb7500)
+  - `components/today/TodayPage.tsx` refetched on every `visibilitychange`, which the app's browser pane fires over and over. It now loads once and uses P2's `useRefreshWhenShown(load)`. Checked in a throwaway browser as the local demo Dean: 6 "shown" events gave 0 extra /cover requests, and Refresh still reloads.
 - **2026-10-27: Live demo college restored** (UX session, the user approved)
   - Someone signed in as the public demo Dean, replaced 4H7GM5's data with the built-in sample ("Sample Institute…") and unpublished it.
   - Restored the same college through the live API: signed in as the demo Dean, PUT docs/demo-college.json, generated (solved, 203 classes, checker ok) and published version 1. The code stays 4H7GM5, so README and lib/demo.ts are unchanged.
