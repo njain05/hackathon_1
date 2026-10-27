@@ -52,6 +52,10 @@ Update after every completed step. Newest entries at the top of each section.
   - README rewritten with screenshots (`docs/screenshots/`, refresh with `UPDATE_SCREENSHOTS=1 npm run e2e`), architecture, 5 admin steps, limitations.
   - Secrets scan of the code and git history: clean. The only matches are made-up test passwords in `backend/tests/test_colleges.py` and `backend/demo_checks.py`.
   - Still to do for P10: make the repo public (the user said "Not yet"), deploy, test the live link on a phone, commit "submission".
+- **2026-10-27: Live site checked after the last push** (UX session)
+  - Vercel built the newest commit (a93e565, GitHub status "success"), and the live JS contains the newest text ("Your room requests", "Dean’s link"). Render's last deploy (b922acb) succeeded; later commits touched no backend code.
+  - On the live site: Home, Setup (online copy from 26 Oct still there), Generate gave **0 clashes** on the free server, and /timetable and /today show the new layout. Nothing was published.
+  - The free server sleeps when idle: the first request took 27 s.
 - **2026-10-27: Setup, Timetables and Reports only for the Dean** (user chose P2's rule; `lib/access.ts`, agreed with P1)
   - `staff` = the Dean's (admin) link, OR a setup draft on a device holding no HOD, in-charge or teacher link (the first-time creator). The Dean's link always wins.
   - Checked in the browser: an HOD + in-charge device with a draft but no Dean link sees Approvals, HOD, Department, My timetable, Book a hall and Events, with no Setup, Timetables or Reports. With the Dean link it sees every page. Full e2e: 16/16 pass.
@@ -445,7 +449,7 @@ Update after every completed step. Newest entries at the top of each section.
 - (none)
 
 ## Next
-1. On Render, set `DATABASE_URL` to the Supabase Session pooler URI. Without it the SQLite file is wiped on every restart.
+1. ~~Set `DATABASE_URL` on Render~~: **already done**. Checked 2026-10-27: `/health/db` says `postgresql`, and a college saved online on 26 Oct survived every redeploy since.
 2. **Pushed 2026-10-27** (c114def..260e470: P7, P8, P10 and the UX work). Vercel and Render redeployed: the live site shows the new Home, /today and /ask. Secrets scan was clean (only the fake test key in test_ask.py). Still to do: ask about making the repo public, and test the live link on a phone.
 3. Add `ANTHROPIC_API_KEY` to `backend/.env` (local) and to Render's Environment, set a spending limit in the Anthropic console, and try a few questions live.
 
