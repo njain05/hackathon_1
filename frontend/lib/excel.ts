@@ -130,13 +130,24 @@ export function importTable<T>(spec: TableSpec<T>, sheets: Sheet[], d: CollegeDa
 }
 
 /** Import every step's sheet found in the workbook, in dependency order. */
-export function importWorkbook(sheets: Sheet[], d: CollegeData): FileImport {
+/**
+ * `merge`: add new rows, update matching ones, keep the rest.
+ * `replace`: each table that has a sheet in the file becomes exactly what the file says
+ * (rows not in the file are removed), so a corrected re-upload really changes the setup.
+ */
+/** The setup tables this workbook has sheets for, e.g. ["Rooms", "Teachers"]. */
+export function sheetsIn(sheets: Sheet[]): string[] {
+  return ALL_TABLES.filter((spec) => sheetFor(spec, sheets)).map((spec) => spec.sheet);
+}
+
+export function importWorkbook(sheets: Sheet[], d: CollegeData, mode: "merge" | "replace" = "merge"): FileImport {
   let data = d;
   const summary: FileImport["summary"] = [];
   const errors: RowError[] = [];
   for (const spec of ALL_TABLES) {
     const sheet = sheetFor(spec, sheets);
     if (!sheet) continue;
+    if (mode === "replace") data = spec.withRows(data, []);
     const r = importGrid(spec, sheet.rows, data);
     data = r.data;
     summary.push({ sheet: spec.sheet, added: r.added, updated: r.updated });

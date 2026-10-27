@@ -7,7 +7,7 @@ import MoreMenu from "@/components/ui/MoreMenu";
 import { AdminLinkNotice, CloudSave, useOpenAdminLink } from "@/components/share/CloudSave";
 import { readAdminAccess, setAdminAccess } from "@/lib/cloud";
 import { ApiError, getSample } from "@/lib/api";
-import { downloadWorkbook, importWorkbook, readSpreadsheet } from "@/lib/excel";
+import { downloadWorkbook, importWorkbook, readSpreadsheet, sheetsIn } from "@/lib/excel";
 import { useAccess } from "@/lib/access";
 import { useMemberAccess } from "@/lib/members";
 import { ensureAwake } from "@/lib/server";
@@ -230,7 +230,18 @@ export default function SetupWizard() {
 
   const importAll = async (file: File) => {
     try {
-      const r = importWorkbook(await readSpreadsheet(file), data);
+      const sheets = await readSpreadsheet(file);
+      // Re-uploading a corrected file must be able to remove rows too, not only add and update.
+      const tables = sheetsIn(sheets);
+      const hasRows = data.rooms.length + data.teachers.length + data.sections.length + data.subjects.length > 0;
+      const replace =
+        !hasRows ||
+        window.confirm(
+          `Replace ${tables.join(", ") || "these tables"} with what's in "${file.name}"?\n\n` +
+            "OK: the setup will match the file (rows that aren't in the file are removed).\n" +
+            "Cancel: keep everything and only add new rows or update matching ones.",
+        );
+      const r = importWorkbook(sheets, data, replace ? "replace" : "merge");
       onChange(r.data);
       setReport({ source: file.name, summary: r.summary, errors: r.errors });
     } catch {
