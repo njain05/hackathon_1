@@ -3,6 +3,11 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: Live demo college restored** (UX session, the user approved)
+  - Someone signed in as the public demo Dean, replaced 4H7GM5's data with the built-in sample ("Sample Institute…") and unpublished it.
+  - Restored the same college through the live API: signed in as the demo Dean, PUT docs/demo-college.json, generated (solved, 203 classes, checker ok) and published version 1. The code stays 4H7GM5, so README and lib/demo.ts are unchanged.
+  - To stop it happening again, the server should refuse unpublish, data replacement and password changes for the demo college (not done).
+  - Full check: 97/97 pytest, lint clean, 16/16 e2e. `ANTHROPIC_API_KEY` is not set locally or on Render (`/assistant/status` → ready false).
 - **2026-10-27: README rewritten and docs/ARCHITECTURE.md** (UX session; facts from P1 and P2)
   - **README**: demo code 4H7GM5 with the five demo sign-ins and the evaluator buttons; who lands where; every feature as built now (sign-in, department review, leave and cover, room booking HOD → Dean, re-import, unpublish, Ask); a "How it's built" diagram and tech table; tests (97 backend, 16 e2e); a configuration table incl. `NEXT_PUBLIC_DEMO_LOGINS`; deploy steps kept. Removed the outdated "no passwords, private links" text.
   - **docs/ARCHITECTURE.md**: system diagram, repo layout, pages by role, what the browser stores, frontend and backend modules, API groups and who may call them, how sign-in and access keys work, the solver pipeline, a data-model diagram of all 15 tables, sequence diagrams (set up → generate → publish, department review, leave and cover, room booking, Ask), deployment and env vars, tests.
