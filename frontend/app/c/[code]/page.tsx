@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 /** The public share link: /c/<slug or code>. */
 export default function Page({ params }: PageProps<"/c/[code]">) {
   return (
-    <Suspense fallback={<PageLoading text="Opening the timetable…" />}>
+    <Suspense fallback={<PageLoading text="Opening the timetable…" nav={false} />}>
       <Open params={params} />
     </Suspense>
   );

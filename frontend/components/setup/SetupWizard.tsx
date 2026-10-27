@@ -6,7 +6,7 @@ import AppNav from "@/components/AppNav";
 import MoreMenu from "@/components/ui/MoreMenu";
 import { AdminLinkNotice, CloudSave, useOpenAdminLink } from "@/components/share/CloudSave";
 import { signOut } from "@/lib/accounts";
-import { readAdminAccess } from "@/lib/cloud";
+import { getAdminCollege, readAdminAccess, useAdminAccess } from "@/lib/cloud";
 import { clearTimetable } from "@/lib/result";
 import { ApiError, getSample } from "@/lib/api";
 import { downloadWorkbook, importWorkbook, readSpreadsheet, sheetsIn } from "@/lib/excel";
@@ -203,7 +203,23 @@ export default function SetupWizard() {
   const [newCollege, setNewCollege] = useState(false);
   const notice = noticeClosed ? null : <AdminLinkNotice state={opening} onClose={() => setNoticeClosed(true)} />;
 
-  if (!loaded || opening.kind === "loading" || access === undefined) return <PageLoading />;
+  // The Dean signed in on a device with no setup copy: bring the one saved online.
+  const admin = useAdminAccess();
+  const [online, setOnline] = useState<"idle" | "loading" | "done">("idle");
+  const adminCode = admin?.code;
+  const adminKey = admin?.key;
+  useEffect(() => {
+    if (!loaded || data || !adminCode || !adminKey || online !== "idle") return;
+    setOnline("loading"); // eslint-disable-line react-hooks/set-state-in-effect -- start of a one-time load
+    getAdminCollege({ code: adminCode, key: adminKey })
+      .then((c) => {
+        if (c.data) replaceData(c.data);
+      })
+      .catch(() => undefined) // offline or asleep: the template picker shows, and CloudSave reports it
+      .finally(() => setOnline("done"));
+  }, [loaded, data, adminCode, adminKey, online, replaceData]);
+
+  if (!loaded || opening.kind === "loading" || access === undefined || online === "loading") return <PageLoading />;
   // A student, teacher or department who reached Setup by mistake.
   if (!data && !access.staff && (access.viewing || department) && !newCollege)
     return <ViewerNotice code={access.viewing} department={department} onNewCollege={() => setNewCollege(true)} />;

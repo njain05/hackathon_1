@@ -9,7 +9,7 @@ import { useAccess } from "@/lib/access";
 import { toApi } from "@/lib/api";
 import { entriesFor, type ViewKind } from "@/lib/grid";
 import { useLocal } from "@/lib/local";
-import { useStoredTimetable } from "@/lib/result";
+import { useStaffTimetable } from "@/lib/staffTimetable";
 import type { CollegeData, Entry } from "@/lib/types";
 import ExportButtons from "./ExportButtons";
 import { CheckSummary } from "./QualityPanel";
@@ -78,7 +78,7 @@ function stableJson(v: unknown): string {
 }
 
 export default function TimetablePage() {
-  const stored = useStoredTimetable();
+  const { stored } = useStaffTimetable();
   const access = useAccess();
   const draftRaw = useLocal("timetable.setup.v1");
   // Has the setup changed since this timetable was generated?

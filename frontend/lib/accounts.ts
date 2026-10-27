@@ -76,8 +76,11 @@ export function homeFor(role: AccountRole): string {
   return { dean: "/today", hod: "/hod", incharge: "/department", teacher: "/teacher", student: "/my" }[role];
 }
 
-/** Remove every kind of access this device holds (signing out, or before signing in as someone else). */
-export function signOut() {
+const SETUP_KEY = "timetable.setup.v1"; // the setup draft (lib/store.tsx)
+const RESULT_KEY = "timetable.result.v1"; // the timetable generated here (lib/result.ts)
+
+/** Remove every kind of access this device holds. */
+function forgetAccess() {
   setAdminAccess(null);
   setMemberAccess("hod", null);
   setMemberAccess("incharge", null);
@@ -86,6 +89,17 @@ export function signOut() {
   setViewedCollege(null);
   writeLocal(ME_KEY, null);
   writeLocal(ACCOUNT_KEY, null);
+}
+
+/**
+ * Sign out: this device forgets who was signed in and the Dean's setup copy, so the
+ * next person on a shared computer sees nothing of theirs. (The Dean's setup autosaves
+ * online, and comes back when they sign in again.)
+ */
+export function signOut() {
+  forgetAccess();
+  writeLocal(SETUP_KEY, null);
+  writeLocal(RESULT_KEY, null);
 }
 
 /** Sign in, and store what this person's pages need. Throws ApiError with the server's message. */
@@ -98,7 +112,13 @@ export async function signIn(code: string, username: string, password: string): 
   // A staff member's page details (department name and so on), checked with their key before anything is stored.
   const info = r.key && r.role !== "dean" && r.role !== "student" ? await getMe(r.college_code, r.key) : null;
 
-  signOut(); // one person per device: nothing left over from whoever used it before
+  // One person per device: nothing left over from whoever used it before. Only a Dean keeps
+  // the setup copy in this browser (it is theirs, or loads from online on Setup).
+  forgetAccess();
+  if (r.role !== "dean") {
+    writeLocal(SETUP_KEY, null);
+    writeLocal(RESULT_KEY, null);
+  }
   if (r.role === "dean" && r.key) {
     setAdminAccess({ code: r.college_code, slug: r.college_slug, name: r.college_name, key: r.key } satisfies AdminAccess);
   } else if (info && r.key && (r.role === "hod" || r.role === "incharge" || r.role === "teacher")) {

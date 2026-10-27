@@ -6,7 +6,7 @@ import AppNav from "@/components/AppNav";
 import ExportButtons from "@/components/timetable/ExportButtons";
 import { useAccess } from "@/lib/access";
 import { LOW_USE, oneDecimal, percent, plural, roomUsage, sectionLoad, teacherWorkload, weekSlots } from "@/lib/reports";
-import { useStoredTimetable } from "@/lib/result";
+import { useStaffTimetable } from "@/lib/staffTimetable";
 import { RoomReport, SectionReport } from "./UsageReports";
 import WorkloadReport from "./WorkloadReport";
 import PageLoading from "@/components/ui/PageLoading";
@@ -34,7 +34,7 @@ function Tile({ label, value, note, alert }: { label: string; value: string; not
 
 export default function ReportsPage() {
   const access = useAccess();
-  const stored = useStoredTimetable();
+  const { stored } = useStaffTimetable();
   const reports = useMemo(() => {
     if (!stored) return null;
     const { data, result } = stored;
