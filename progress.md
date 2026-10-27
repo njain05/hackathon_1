@@ -3,6 +3,13 @@
 Update after every completed step. Newest entries at the top of each section.
 
 ## Done
+- **2026-10-27: People & sign-ins, the Dean's own sign-in, unpublish and delete** (P2–P5 session, on P1's `lib/accounts.ts` from 064b86d)
+  - `/people` is now **People & sign-ins**. Per department: HOD and timetable in-charge (name and username; suggested `hod.cse`, `incharge.cse`). Teachers: one at a time, or **Make sign-ins for all N teachers without one** (username = teacher code in small letters). Students: paste from Excel, "roll number, name, section" (a section code or name; a header row is skipped). A section can be picked for rows without one. Skipped rows stay in the box, with the server's reason shown. New passwords are shown once in a table to **Download as CSV** or **Print**; the page warns before leaving. Each person has **Reset password** and **Remove**. Students can be searched. The old private links are under "Old links".
+  - After **Save online & share**, the Dean chooses a username and password (`POST accounts/dean`) and this device signs in as them. The admin link is now under "Backup", and the bar button reads "Sign-in & share links", which can also change the sign-in later.
+  - An unnamed college asks for its name instead of becoming "My College". The which-copy prompt describes both copies (name and counts). Opening an admin link over a different local setup no longer claims "now saves to it automatically".
+  - `/timetable`: **Unpublish** (`DELETE /colleges/{ref}/timetable`: students and teachers see "not published yet"; setup, leave and bookings stay) and **Delete this timetable** (also unpublishes, then back to the setup).
+  - Re-uploading a workbook can **replace** the setup (fb4eb1d). Before, it only merged, so data could not be changed by uploading again.
+  - Checked locally: the HOD, teacher and student sign-ins made on the page all log in. After a reset the old password fails and the new one works; after Remove the login fails. A bad section row is skipped and named. The Dean sign-in signs the device in. Unpublish updates the bar at once. Backend 97 passed, lint clean, build OK (2fd1b28, 66f6809, b03dda3).
 - **2026-10-27: Sign-in screens** (UX session, on P1's `lib/accounts.ts` from 064b86d; the user chose passwords for everyone)
   - `/login`: college code (remembered from the last sign-in), username and password. Errors are the server's own words. After signing in it opens the person's page (`homeFor`: Dean → /today, HOD → /hod, in-charge → /department, teacher → /teacher, student → /my).
   - Home: one big **Sign in**, plus "New college? Set it up" and "Book a room without an account" for clubs. When signed in: "Signed in as NAME (ROLE, college)" with Go to my page and Sign out.
