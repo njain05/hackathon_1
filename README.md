@@ -2,17 +2,29 @@
 
 **One place for the whole college.** The Dean's office generates a clash-free timetable in minutes. Everyone signs in with their own username and password and sees only their own pages. Departments prepare and approve their own data, teachers ask for leave and get covered, students see what's on now and next, and clubs book rooms with digital approval instead of paper letters.
 
-**Live demo:** <https://college-timetable-teal.vercel.app>. The first visit may take up to a minute while the free server wakes up.
+## Live links
+
+| What | Link |
+|---|---|
+| **The app** (open this) | **<https://college-timetable-teal.vercel.app>** |
+| Sign in (demo buttons for every role) | <https://college-timetable-teal.vercel.app/login> |
+| Demo college's timetable, no sign-in (share link) | <https://college-timetable-teal.vercel.app/c/4H7GM5> |
+| Book a room (no account needed) | <https://college-timetable-teal.vercel.app/book> |
+| Events calendar | <https://college-timetable-teal.vercel.app/events> |
+| Backend API, interactive docs | <https://college-timetable-api.onrender.com/docs> |
+| Backend health check | <https://college-timetable-api.onrender.com/health> |
+
+The frontend runs on **Vercel**, the backend on **Render** (free plan, Singapore), and the database is **Postgres on Supabase**. The free backend sleeps after about 15 minutes without visitors, so **the first visit can take up to a minute** while it wakes up (the site says "Waking up the server"). Generating a timetable there takes about 20 seconds for the sample college and about a minute for the larger demo college.
 
 Built for the Punjab Jobs AI Bootcamp hackathon (J-PAL South Asia). It works for any college: nothing about days, periods, breaks, rooms or departments is hard-coded.
 
 ![A section's week: periods with clock times, tea and lunch breaks, labs as one block, a colour per subject](docs/screenshots/desktop-grid.png)
 
-**Contents:** [Try it](#try-it-sign-in-as-each-person) · [Who it's for](#who-its-for) · [What it does](#what-it-does) · [How a Dean uses it](#how-a-dean-uses-it-in-5-steps) · [Screenshots](#screenshots) · [How it's built](#how-its-built) · [Run it locally](#run-it-locally) · [Deploy](#deploy) · [Limitations](#limitations-and-roadmap)
+**Contents:** [Live links](#live-links) · [Try it](#try-it-sign-in-as-each-person) · [Who it's for](#who-its-for) · [What it does](#what-it-does) · [How a Dean uses it](#how-a-dean-uses-it-in-5-steps) · [Screenshots](#screenshots) · [How it's built](#how-its-built) · [Run it locally](#run-it-locally) · [Limitations](#limitations-and-roadmap)
 
 ## Try it: sign in as each person
 
-Open **Sign in** on the live site. Under **"Evaluators: try it as"**, pick a person: their sign-in shows in grey in the boxes, so just press **Sign in**.
+Open **[Sign in](https://college-timetable-teal.vercel.app/login)** on the live site. Under **"Evaluators: try it as"**, pick a person: their sign-in shows in grey in the boxes, so just press **Sign in**.
 
 | Sign in as | Username | Password | What to try |
 |---|---|---|---|
@@ -191,7 +203,7 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
-Without `DATABASE_URL`, the backend uses a local SQLite file. To try the sign-ins locally, make a demo college with `cd backend && .venv/bin/python seed_demo.py http://localhost:8000` and put its code in `NEXT_PUBLIC_DEMO_LOGINS` (see [Configuration](#configuration)).
+Without `DATABASE_URL`, the backend uses a local SQLite file. To try the sign-ins locally, make a demo college with `cd backend && .venv/bin/python seed_demo.py http://localhost:8000` and put its code in `NEXT_PUBLIC_DEMO_LOGINS` (see [Settings](#settings-environment-variables)).
 
 ### Tests
 
@@ -210,11 +222,9 @@ The end-to-end tests click through the app in a real browser:
 
 `UPDATE_SCREENSHOTS=1 npm run e2e` refreshes the screenshots in this README.
 
-## Deploy
+### Settings (environment variables)
 
-The backend goes on **Render** (free) and the frontend on **Vercel** (free). Order matters: Render first, because Vercel needs its URL, then back to Render to allow the Vercel URL.
-
-### Configuration
+These are set on the live Vercel and Render projects; locally they go in `frontend/.env.local` and `backend/.env`.
 
 | Where | Variable | Purpose |
 |---|---|---|
@@ -227,47 +237,7 @@ The backend goes on **Render** (free) and the frontend on **Vercel** (free). Ord
 
 Secrets (`DATABASE_URL`, `ANTHROPIC_API_KEY`) go only in Render's Environment page, never in the code or in a `NEXT_PUBLIC_` variable.
 
-### 1. Backend on Render
-1. Go to <https://dashboard.render.com> and sign in with GitHub.
-2. Click **New +** → **Blueprint**.
-3. Under **Connect a repository**, pick `njain05/hackathon_1`. If it isn't listed (the repo is private), click **Configure account** / **Connect GitHub**, allow access to `hackathon_1`, and come back.
-4. Render reads `render.yaml` and shows one service, **college-timetable-api** (free, Singapore). It asks for two values:
-   - `FRONTEND_ORIGINS`: type `http://localhost:3000` for now. You'll replace it in step 3.
-   - `DATABASE_URL`: your Supabase connection string. Use the **Session pooler** URI from Supabase → Project → **Connect** (Render can't reach Supabase's direct, IPv6-only address). If you don't have Supabase yet, type `sqlite:///./timetable.db` (works, but data is wiped whenever Render restarts).
-5. Click **Apply**. The first build takes a few minutes (it installs OR-Tools).
-6. When it says **Live**, copy the URL at the top, e.g. `https://college-timetable-api.onrender.com`.
-7. Check it: open `<that URL>/health` in a browser. You should see `{"status":"ok"}`.
-
-### 2. Frontend on Vercel
-1. Go to <https://vercel.com/new> and sign in with GitHub.
-2. Under **Import Git Repository**, find `hackathon_1` and click **Import**. If it isn't listed, click **Adjust GitHub App Permissions** and allow the repo.
-3. **Root Directory**: click **Edit** and choose `frontend`. The framework shows **Next.js** automatically.
-4. Open **Environment Variables** and add:
-   - Name `NEXT_PUBLIC_API_URL`, value your Render URL from step 1.6, **without** a trailing `/`.
-5. Click **Deploy**. When it finishes, copy your site URL, e.g. `https://your-project.vercel.app` (shown under **Domains**).
-
-If you forget the variable, the Vercel build stops with "NEXT_PUBLIC_API_URL is not set" on purpose. Add it under **Settings → Environment Variables**, then **Deployments → ⋯ → Redeploy**. The value is baked in at build time, so any change to it needs a redeploy.
-
-### 3. Let the frontend talk to the backend
-1. Back on Render, open **college-timetable-api** → **Environment**.
-2. Edit `FRONTEND_ORIGINS` and set it to your Vercel URL from step 2.5, starting with `https://`, without a trailing `/`. To also keep local development working, use a comma: `https://your-project.vercel.app,http://localhost:3000`.
-3. Click **Save, rebuild, and deploy**.
-
-### 4. Check the live site
-1. Open the Vercel URL. The home page badge should say **Server connected** (the first visit may show "Waking up the server" for up to a minute).
-2. **New college? Set it up → Load sample college → Check & generate → Generate timetable**. You should land on the timetables with **Verified: 0 clashes**.
-3. For the evaluator demo sign-ins, run `python backend/seed_demo.py <Render URL>` and put the printed college code in `frontend/lib/demo.ts`.
-
-### Good to know
-- **The free Render server sleeps** after about 15 minutes without visitors. The next visit wakes it in up to a minute, and the site shows "Waking up the server, this can take up to a minute" meanwhile. Before a demo, open `<Render URL>/health` a couple of minutes early.
-- **Every push to `main` redeploys both** Render and Vercel automatically.
-- **Solver speed on the free plan**: Render's free server has about a tenth of a CPU, so `render.yaml` sets `SOLVER_WORKERS=2` (2 search threads beat 8 on a tiny CPU). Generating takes about 20 seconds for the sample college and about a minute for the larger demo college there, against 5–20 seconds on a laptop; the page keeps waiting and says so. A paid plan with more CPU is faster; then raise `SOLVER_WORKERS` to match its CPU count.
-- **Vercel preview links** (from other branches) have different URLs that aren't in `FRONTEND_ORIGINS`, so they can't reach the backend. Use the production URL.
-- **Troubleshooting**:
-  - Saving or opening a college fails with a database message: open `<Render URL>/health/db`. It says `{"database":"ok"}` or why it can't connect, with the password hidden. *Can't load plugin: sqlalchemy.dialects:http* means you pasted Supabase's project URL (`https://xxxx.supabase.co`) instead of the connection string: use the **Session pooler** URI, which starts with `postgresql://`. *Network is unreachable* means you used Supabase's direct address: switch to the **Session pooler** URI. *password authentication failed* means the password in `DATABASE_URL` is wrong (if it contains `@ # / : ?`, reset it in Supabase to letters and numbers). After fixing `DATABASE_URL`, click **Save, rebuild, and deploy**.
-  - Browser console says *blocked by CORS policy*: `FRONTEND_ORIGINS` doesn't exactly match the site's address (check `https://` and no trailing `/`).
-  - Render build fails on the Python version: change `PYTHON_VERSION` in Render → Environment to the newest `3.12.x`.
-- **For the assistant**, also set a monthly spending limit in the Anthropic console.
+Every push to `main` redeploys both Vercel and Render automatically.
 
 ## Limitations and roadmap
 
