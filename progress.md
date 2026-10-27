@@ -10,7 +10,7 @@ Update after every completed step. Newest entries at the top of each section.
   - `/account`: change password (current, new, again; at least 6 characters like the server).
   - My timetable: a signed-in student is locked to their own section (no student/teacher switch, no Change, no Change college).
   - Checked in the browser with local test accounts: wrong password message, student lands on /my locked to CSE-3A, password change, sign out clears access, Dean lands on /today with every Dean page, phone menu fits 375px.
-  - e2e: 14/15. `main-flows.spec.ts:35` still expects a signed-out share-link visitor to see "My timetable"; under the new rule they see Sign in, so P1 is updating that test.
+  - Signed out with a college opened from its share link (e.g. a judge), the bar also shows **My timetable**; with nothing opened it is only Sign in and Events. Checked in the browser.
 - **2026-10-27: The Dean's autosave never overwrites a department's newer save** (bug P1 found)
   - `PUT /colleges/{ref}/data` takes `X-Based-On` (the updated_at the copy started from). If the draft changed since (a department's scoped save, a room-share approval, or the Dean on another device), it returns 409 and keeps the newer copy. Clients without the header work as before.
   - CloudSave sends it on every autosave. On a 409 it re-checks and asks: "Someone saved changes online since this browser last saved (a department, or you on another device)… Nothing was overwritten. Which copy do you want to keep?" The options are "Use the online copy" or "Keep this browser's copy (replaces theirs)".

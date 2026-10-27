@@ -51,9 +51,11 @@ export default function AppNav({ collegeName }: { collegeName?: string }) {
     ...(admin ? [{ href: "/people", label: "People" }] : []),
     ...everyone,
   ];
-  // Signed out: nobody's pages, only Events, plus Setup while someone creates a brand-new college here.
+  // Signed out: nobody's pages, only Events, plus Setup while someone creates a brand-new college here,
+  // and My timetable when a college was opened from its share link (e.g. a visitor looking at it).
   const signedOut: NavLink[] = [
     ...(staff ? [{ href: "/setup", label: "Setup" }, { href: "/timetable", label: "Timetables" }] : []),
+    ...(access?.viewing ? [{ href: "/my", label: "My timetable" }] : []),
     { href: "/events", label: "Events" },
   ];
   const links = !account ? signedOut : account.role === "student" ? everyone : signedIn;
