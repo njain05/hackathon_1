@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { CopyField } from "@/components/share/CloudSave";
 import { ApiError } from "@/lib/api";
+import { useRefreshWhenShown } from "@/lib/refresh";
 import { type Booking, cancelBooking, refreshRememberedBooking, trackBooking, trackLink } from "@/lib/bookings";
 import { getPublished } from "@/lib/cloud";
 import type { CollegeData } from "@/lib/types";
@@ -34,11 +35,9 @@ export default function TrackBooking({ token }: { token: string }) {
 
   useEffect(() => {
     load();
-    // Check again whenever the organiser comes back to the page.
-    const onVisible = () => document.visibilityState === "visible" && load();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [load]);
+  // Check again whenever the organiser comes back to the page.
+  useRefreshWhenShown(load);
 
   // The college's clock times, to show "11:40–13:20" rather than just period numbers.
   const code = b?.college_code;

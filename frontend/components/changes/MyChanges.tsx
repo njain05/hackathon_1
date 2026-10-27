@@ -13,10 +13,10 @@ import {
   getDay,
   shortDate,
 } from "@/lib/changes";
+import { useRefreshWhenShown } from "@/lib/refresh";
 import type { CollegeData } from "@/lib/types";
 
 const UPCOMING_DAYS = 6;
-
 /**
  * Today's actual timetable (published week + today's changes) and the changes
  * coming up this week, for the college open on this device.
@@ -41,14 +41,10 @@ export function useMyDay(code: string | null, date: string | null) {
   // Check again when the phone comes back online or the app is opened again.
   useEffect(() => {
     const again = () => setTick((t) => t + 1);
-    const onVisible = () => document.visibilityState === "visible" && again();
     window.addEventListener("online", again);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("online", again);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
+    return () => window.removeEventListener("online", again);
   }, []);
+  useRefreshWhenShown(() => setTick((t) => t + 1));
   const retry = () => setTick((t) => t + 1);
   return state.key === key ? { ...state, retry } : { key, day: null, upcoming: [], error: null, retry };
 }

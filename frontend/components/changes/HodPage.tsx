@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { ApiError } from "@/lib/api";
+import { useRefreshWhenShown } from "@/lib/refresh";
 import { periodText } from "@/lib/bookings";
 import { type HodView, type Leave, decideLeave, getHodView, names, shortDate } from "@/lib/changes";
 import { getPublished } from "@/lib/cloud";
@@ -126,10 +127,8 @@ export default function HodPage() {
 
   useEffect(() => {
     load();
-    const onVisible = () => document.visibilityState === "visible" && load();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [load]);
+  useRefreshWhenShown(load);
 
   const code = hod?.college_code;
   useEffect(() => {

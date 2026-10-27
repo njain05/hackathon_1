@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, call, toApi } from "./api";
 import { readLocal, useLocal, writeLocal } from "./local";
+import { useRefreshWhenShown } from "./refresh";
 import type { StoredTimetable } from "./result";
 import type { CollegeData, SolveResult } from "./types";
 
@@ -214,14 +215,10 @@ export function useViewerTimetable(local: StoredTimetable | null | undefined, fa
 
   // Refresh when the phone comes back online or the app is opened again.
   useEffect(() => {
-    const onVisible = () => document.visibilityState === "visible" && refresh();
     window.addEventListener("online", refresh);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("online", refresh);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
+    return () => window.removeEventListener("online", refresh);
   }, [refresh]);
+  useRefreshWhenShown(refresh);
 
   const state = useMemo<ViewerState>(() => {
     if (local === undefined || remembered === undefined || rawCache === undefined) return { kind: "loading" };

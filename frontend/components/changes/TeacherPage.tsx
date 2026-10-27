@@ -9,6 +9,7 @@ import { StatusBadge, whereItIs } from "@/components/bookings/common";
 import { type Leave, LEAVE_STATUS, addLeave, getMyLeaves, isoDate, shortDate } from "@/lib/changes";
 import { getPublished } from "@/lib/cloud";
 import { type MemberAccess, setMemberAccess, useMemberAccess, useOpenMemberLink } from "@/lib/members";
+import { useRefreshWhenShown } from "@/lib/refresh";
 import type { CollegeData } from "@/lib/types";
 import { ChangesFeed, ChangesUnknown, useMyDay } from "./MyChanges";
 import PageLoading from "@/components/ui/PageLoading";
@@ -194,11 +195,7 @@ export default function TeacherPage() {
   }, [teacher, key]);
 
   // Coming back to the page (e.g. after the HOD decided): show the latest.
-  useEffect(() => {
-    const onVisible = () => document.visibilityState === "visible" && setTick((t) => t + 1);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, []);
+  useRefreshWhenShown(() => setTick((t) => t + 1));
 
   if (teacher === undefined || opening.opening) return <PageLoading />;
 

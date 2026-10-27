@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { CopyField } from "@/components/share/CloudSave";
 import { ApiError } from "@/lib/api";
+import { useRefreshWhenShown } from "@/lib/refresh";
 import {
   type ApprovalsView,
   type ApproverAuth,
@@ -103,11 +104,7 @@ export default function Approvals() {
   const [message, setMessage] = useState<string | null>(null);
 
   // New requests may arrive while the page is open in another tab: check again when it is shown.
-  useEffect(() => {
-    const onVisible = () => document.visibilityState === "visible" && setReload((r) => r + 1);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, []);
+  useRefreshWhenShown(() => setReload((r) => r + 1));
 
   // Opening an approver's link (/approvals#college=…&step=…&key=…): check it, keep it in this browser.
   // Also when a link is opened while this page is already showing (only the #… part changes).
