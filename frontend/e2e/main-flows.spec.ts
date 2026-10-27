@@ -35,10 +35,16 @@ test("admin loads the sample college and generates a clash-free timetable", asyn
 test("admin publishes and a student opens it with the share link", async ({ browser }) => {
   await admin.goto("/setup");
   await admin.getByRole("button", { name: "Save online & share" }).click();
-  await expect(admin.getByText("Save this link, it is your password.")).toBeVisible({ timeout: 30_000 });
+  // The Dean chooses how they'll sign in from now on.
+  await expect(admin.getByText("Choose how you’ll sign in")).toBeVisible({ timeout: 30_000 });
+  await admin.getByLabel("Username").fill("dean");
+  await admin.getByLabel("Password (at least 6 characters)").fill("dean1234");
+  await admin.getByLabel("Type the password again").fill("dean1234");
+  await admin.getByRole("button", { name: "Save my sign-in" }).click();
+  await expect(admin.getByText("You sign in as “dean”.")).toBeVisible({ timeout: 30_000 });
   code = (await admin.getByText(/College code [A-Z0-9]{6}/).first().textContent())?.match(/College code ([A-Z0-9]{6})/)?.[1] ?? "";
   expect(code).toMatch(/^[A-Z0-9]{6}$/);
-  await admin.getByRole("button", { name: /saved my admin link/ }).click();
+  await admin.getByRole("button", { name: "Done" }).click();
 
   await admin.goto("/timetable");
   await admin.getByRole("button", { name: "Publish timetable" }).click();
